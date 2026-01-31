@@ -13,25 +13,18 @@ ARG FFMPEG_VERSION="=7:5.1.8-0+deb12u1"
 RUN set -eux; \
     apt-get update; \
     LIBOPENSHOT_PKG="libopenshot21${LIBOPENSHOT_VERSION}"; \
-    LIBOPENSHOT_DEV_PKG="libopenshot-dev${LIBOPENSHOT_VERSION}"; \
     FFMPEG_PKG="ffmpeg${FFMPEG_VERSION}"; \
     apt-get install -y --no-install-recommends \
     ${LIBOPENSHOT_PKG} \
-    ${LIBOPENSHOT_DEV_PKG} \
     python3-openshot${LIBOPENSHOT_VERSION} \
     ${FFMPEG_PKG} \
-    ca-certificates \
-    cmake \
-    git \
-    build-essential \
-    # System libraries required to build and support Pillow (image IO / fonts)
+    # System libraries required to support Pillow (image IO / fonts)
     libjpeg-dev \
     zlib1g-dev \
     libtiff5-dev \
     libfreetype6-dev \
     libwebp-dev \
     libopenjp2-7-dev \
-    pkg-config \
     ; \
     rm -rf /var/lib/apt/lists/*;
 
@@ -39,9 +32,8 @@ RUN set -eux; \
 COPY requirements.txt /tmp/requirements.txt
 # Suppress pip's root user warning during image build (we run pip as root inside the image)
 ENV PIP_ROOT_USER_ACTION=ignore
-# Add Debian dist-packages to PYTHONPATH for system packages
-# Prioritize /usr/local for custom builds of libopenshot
-ENV PYTHONPATH="/usr/local/lib/python3.11/dist-packages:/usr/lib/python3/dist-packages:$PYTHONPATH"
+# Add Debian dist-packages to PYTHONPATH for python3-openshot
+ENV PYTHONPATH="/usr/lib/python3/dist-packages:$PYTHONPATH"
 # Set bash history file
 ENV HISTFILE="/workspace/.bash_history"
 ENV HISTSIZE=10000
