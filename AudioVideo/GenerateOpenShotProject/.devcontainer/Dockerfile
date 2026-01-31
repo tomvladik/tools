@@ -40,7 +40,8 @@ COPY requirements.txt /tmp/requirements.txt
 # Suppress pip's root user warning during image build (we run pip as root inside the image)
 ENV PIP_ROOT_USER_ACTION=ignore
 # Add Debian dist-packages to PYTHONPATH for system packages
-ENV PYTHONPATH="/usr/lib/python3/dist-packages:$PYTHONPATH"
+# Prioritize /usr/local for custom builds of libopenshot
+ENV PYTHONPATH="/usr/local/lib/python3.11/dist-packages:/usr/lib/python3/dist-packages:$PYTHONPATH"
 # Set bash history file
 ENV HISTFILE="/workspace/.bash_history"
 ENV HISTSIZE=10000

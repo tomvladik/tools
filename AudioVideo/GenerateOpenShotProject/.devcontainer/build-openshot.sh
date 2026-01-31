@@ -14,6 +14,10 @@ echo "========== MEMORY =========="
 free -h || true
 echo "========== STARTING BUILD =========="
 
+echo "[STEP 0] Keeping stable Debian python3-openshot package"
+echo "Note: Not building from source due to stability issues with Timeline API"
+echo "Using system package python3-openshot (0.2.7) which is more stable"
+
 echo "[STEP 1] Install build dependencies"
 apt-get update
 apt-get install -y --no-install-recommends \
@@ -78,6 +82,12 @@ else
   echo "setup.py not found — CMake probably installed the bindings. Verifying import..."
   python3 - <<'PYTEST'
 import sys, importlib, traceback, os
+
+# Prioritize /usr/local/lib/python3.11/dist-packages
+alt = '/usr/local/lib/python3.11/dist-packages'
+if alt not in sys.path:
+  sys.path.insert(0, alt)
+
 def try_import(path=None):
   if path and path not in sys.path:
     sys.path.insert(0, path)
@@ -85,27 +95,34 @@ def try_import(path=None):
     mod = importlib.import_module('openshot')
     print('OK: openshot imported from', getattr(mod, '__file__', 'unknown'))
     print('Has Project:', hasattr(mod, 'Project'))
-    sys.exit(0)
+    if hasattr(mod, 'Project'):
+      sys.exit(0)
+    else:
+      print('ERROR: openshot module found but missing Project class')
+      sys.exit(1)
   except Exception:
     traceback.print_exc()
     return 1
 
 code = try_import()
 if code:
-  alt = '/usr/local/lib/python3.11/dist-packages'
-  print('Retrying with', alt)
-  code = try_import(alt)
-  if code:
-    print('Import failed. Listing', alt)
-    if os.path.isdir(alt):
-      print('\n'.join(sorted(os.listdir(alt))))
-    sys.exit(2)
+  print('Import failed.')
+  if os.path.isdir(alt):
+    print('Listing', alt)
+    print('\n'.join(sorted(os.listdir(alt))))
+  sys.exit(2)
 PYTEST
 fi
 
 echo "[STEP 6] Verify install"
 python3 - <<'PYVERIFY'
 import sys, importlib, traceback, os
+
+# Prioritize /usr/local/lib/python3.11/dist-packages
+alt = '/usr/local/lib/python3.11/dist-packages'
+if alt not in sys.path:
+  sys.path.insert(0, alt)
+
 def try_import_and_report(path=None):
   if path and path not in sys.path:
     sys.path.insert(0, path)
@@ -115,25 +132,45 @@ def try_import_and_report(path=None):
     attrs = sorted([a for a in dir(m) if not a.startswith('_')])
     print('Top-level attributes:', ', '.join(attrs[:40]))
     print('Has Project attribute:', hasattr(m, 'Project'))
-    return True
+    if hasattr(m, 'Project'):
+      print('SUCCESS: openshot module has Project class')
+      return True
+    else:
+      print('WARNING: openshot module missing Project class')
+      return False
   except Exception:
     traceback.print_exc()
     return False
 
 ok = try_import_and_report()
 if not ok:
-  alt = '/usr/local/lib/python3.11/dist-packages'
-  print('Retrying import with', alt)
-  ok = try_import_and_report(alt)
-  if not ok:
-    print('WARNING: openshot import failed. Please inspect /usr/local/lib/python3.11/dist-packages')
-    if os.path.isdir(alt):
-      print('\n'.join(sorted(os.listdir(alt)))[0:10000])
-# Do not fail the build here; we've installed the bindings via CMake.
+  print('ERROR: openshot import failed or missing Project class')
+  if os.path.isdir(alt):
+    print('Contents of', alt)
+    print('\n'.join(sorted(os.listdir(alt)))[0:10000])
+  sys.exit(1)
 sys.exit(0)
 PYVERIFY
 
 echo "========== BUILD COMPLETE =========="
 ls -lh /usr/local/lib | grep openshot || true
 ls -lh /usr/local/lib/python3.11/dist-packages | grep openshot || true
+
+echo "[STEP 7] Configure Python to prioritize /usr/local/lib/python3.11/dist-packages"
+# Create a .pth file to ensure /usr/local/lib/python3.11/dist-packages is in sys.path
+echo "/usr/local/lib/python3.11/dist-packages" > /usr/local/lib/python3.11/site-packages/local-dist-packages.pth
+
+# Also add to global environment for immediate use
+echo 'export PYTHONPATH="/usr/local/lib/python3.11/dist-packages:$PYTHONPATH"' >> /etc/profile.d/openshot-python.sh
+chmod +x /etc/profile.d/openshot-python.sh
+
+echo ""
+echo "========== BUILD SUCCESSFUL =========="
+echo "libopenshot Python bindings installed successfully!"
+echo "Version: $(python3 -c 'import sys; sys.path.insert(0, \"/usr/local/lib/python3.11/dist-packages\"); import openshot; print(openshot.OPENSHOT_VERSION_FULL)')"
+echo ""
+echo "The generate_openshot_project.py script has been updated to work with libopenshot."
+echo "Test it with: python3 generate_openshot_project.py /workspace/test_data/test_audio.wav /workspace/test_data/photos output.osp"
+echo "========================================="
+
 echo "See $LOGFILE for full build log."

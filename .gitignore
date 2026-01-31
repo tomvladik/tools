@@ -23,3 +23,6 @@ Thumbs.db
 **/.bash_history
 **/.bashrc
 **/*.log
+
+*.mp4
+*.osp
