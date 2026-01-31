@@ -14,3 +14,6 @@ This repository contains scripts for troubleshooting and resolving common issues
 - **Get-WU-LogInfo.ps1**  
   Analyzes Windows Update logs, extracts error codes, and summarizes update failures. Generates a detailed report to help diagnose persistent Windows Update problems.
 
+  - **Fix-Docker.ps1**  
+    Performs a maximum refresh of Docker Desktop and WSL on Windows. Stops Docker processes, resets WSL distros, repairs Windows Installer, restarts virtualization services, updates the WSL kernel, removes Docker data directories, and refreshes Windows virtualization features. Optionally runs DISM and SFC system repair. Run in elevated PowerShell (Administrator).
+
