@@ -57,8 +57,13 @@ python generate_openshot_project.py --fade-duration 1 audio.mp3 ./photos/ output
 
 # Custom background color (red)
 python generate_openshot_project.py --bg-color "#ff0000" audio.mp3 ./photos/ output.osp
-```
 
+# Print environment tool versions (ffmpeg, git, docker, etc.)
+python generate_openshot_project.py --version
+
+# Print script version
+python generate_openshot_project.py --script-version
+```
 ### Command-line Options
 
 ```
@@ -127,6 +132,21 @@ Install FFmpeg:
 - Linux: `sudo apt-get install ffmpeg`
 - macOS: `brew install ffmpeg`
 - Windows: Download from https://ffmpeg.org/download.html
+
+### Using PowerShell activation scripts
+
+On Windows, don't pass generator flags to the virtual-environment activation script (for example, `& .\.venv\Scripts\Activate.ps1 --version`), because the activation script doesn't accept those options and PowerShell may misinterpret them.
+
+Correct usage:
+
+```powershell
+# Activate the venv first
+& .\.venv\Scripts\Activate.ps1
+# Then run the generator (or call Python directly)
+python .\generate_openshot_project.py --version
+```
+
+You can also run the script without activating the venv by invoking your full Python executable.
 
 ### Project file won't open in OpenShot
 

@@ -24,11 +24,22 @@ RUN set -eux; \
     cmake \
     git \
     build-essential \
+    # System libraries required to build and support Pillow (image IO / fonts)
+    libjpeg-dev \
+    zlib1g-dev \
+    libtiff5-dev \
+    libfreetype6-dev \
+    libwebp-dev \
+    libopenjp2-7-dev \
+    pkg-config \
     ; \
     rm -rf /var/lib/apt/lists/*;
 
 # Pin pip/tool versions (change these in requirements.txt if needed)
 COPY requirements.txt /tmp/requirements.txt
-RUN python -m pip install --upgrade pip && python -m pip install -r /tmp/requirements.txt
+# Suppress pip's root user warning during image build (we run pip as root inside the image)
+ENV PIP_ROOT_USER_ACTION=ignore
+RUN python -m pip install --upgrade pip --root-user-action=ignore && \
+    python -m pip install --root-user-action=ignore -r /tmp/requirements.txt
 
 WORKDIR /workspace
