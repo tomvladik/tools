@@ -17,6 +17,7 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends \
     ${LIBOPENSHOT_PKG} \
     python3-openshot${LIBOPENSHOT_VERSION} \
+    libopenshot-audio8 \
     ${FFMPEG_PKG} \
     # System libraries required to support Pillow (image IO / fonts)
     libjpeg-dev \
