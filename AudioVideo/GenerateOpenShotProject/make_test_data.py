@@ -30,6 +30,91 @@ def parse_hex_color(s: str) -> Tuple[int, int, int]:
     return r, g, b
 
 
+def generate_wav_8bit_melody(path: str, duration: float = 5.0, sample_rate: int = 44100, volume: float = 0.4):
+    """Generate 8-bit chiptune melody.
+    
+    Uses square wave synthesis typical of ZX Spectrum beeper sound.
+    """
+    # Manic Miner melody notes (simplified version of "In the Hall of the Mountain King")
+    # Note frequencies in Hz (approximate)
+    notes = {
+        'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23,
+        'G4': 392.00, 'A4': 440.00, 'B4': 493.88,
+        'C5': 523.25, 'D5': 587.33, 'E5': 659.25, 'F5': 698.46,
+        'G5': 783.99, 'A5': 880.00,
+        'REST': 0
+    }
+    
+    # Simplified melody sequence (repeating pattern)
+    melody = [
+        ('E4', 0.2), ('D4', 0.2), ('C4', 0.2), ('D4', 0.2), ('E4', 0.2), ('D4', 0.2),
+        ('E4', 0.2), ('F4', 0.2), ('G4', 0.4),
+        ('E4', 0.2), ('D4', 0.2), ('C4', 0.2), ('D4', 0.2), ('E4', 0.2), ('D4', 0.2),
+        ('E4', 0.2), ('F4', 0.2), ('G4', 0.4),
+        ('G4', 0.2), ('A4', 0.2), ('B4', 0.2), ('C5', 0.2), ('B4', 0.2), ('A4', 0.2),
+        ('G4', 0.2), ('A4', 0.2), ('B4', 0.4),
+        ('REST', 0.2),
+    ]
+    
+    nframes = int(sample_rate * duration)
+    n_channels = 2
+    sampwidth = 2
+    max_ampl = int((2 ** (sampwidth * 8 - 1)) - 1)
+    
+    with wave.open(path, "wb") as wf:
+        wf.setnchannels(n_channels)
+        wf.setsampwidth(sampwidth)
+        wf.setframerate(sample_rate)
+        
+        current_time = 0.0
+        frame_idx = 0
+        melody_idx = 0
+        
+        last_pct = -1
+        
+        while frame_idx < nframes:
+            # Get current note and duration
+            if melody_idx < len(melody):
+                note_name, note_duration = melody[melody_idx]
+                freq = notes[note_name]
+            else:
+                # Loop the melody
+                melody_idx = 0
+                note_name, note_duration = melody[melody_idx]
+                freq = notes[note_name]
+            
+            # Calculate frames for this note
+            note_frames = int(sample_rate * note_duration)
+            note_end_frame = min(frame_idx + note_frames, nframes)
+            
+            # Generate square wave for this note
+            buf = bytearray()
+            for i in range(frame_idx, note_end_frame):
+                t = i / sample_rate
+                
+                if freq == 0:  # Rest
+                    sample_val = 0
+                else:
+                    # Square wave: alternates between +max and -max
+                    phase = (t * freq) % 1.0
+                    sample_val = int(volume * max_ampl if phase < 0.5 else -volume * max_ampl)
+                
+                # Stereo
+                buf.extend(struct.pack('<h', sample_val))
+                buf.extend(struct.pack('<h', sample_val))
+            
+            wf.writeframes(bytes(buf))
+            frame_idx = note_end_frame
+            current_time += note_duration
+            melody_idx += 1
+            
+            # Progress
+            pct = int((frame_idx / nframes) * 100)
+            if pct - last_pct >= 10 or frame_idx >= nframes:
+                print(f"  Audio generation: {pct}%")
+                last_pct = pct
+
+
 def generate_wav(path: str, duration: float = 5.0, sample_rate: int = 44100, freq: float = 440.0, volume: float = 0.5):
     """Generate a simple stereo WAV file with a sine tone using buffered block writes.
 
@@ -303,7 +388,7 @@ def main():
     photos_dir = os.path.join(out_dir, "photos")
 
     print("Generating audio...")
-    generate_wav(audio_path, duration=args.duration, freq=args.freq)
+    generate_wav_8bit_melody(audio_path, duration=args.duration)
 
     print("Generating photos...")
     generate_photos(photos_dir, count=args.photos, width=args.img_width,

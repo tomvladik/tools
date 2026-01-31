@@ -1,6 +1,6 @@
 # Test data directories (ignore contents)
 **/test_data/**
-
+**/openshot.settings
 # Python cache files
 **/__pycache__/
 *.py[cod]
@@ -19,10 +19,22 @@ venv/
 # OS files
 .DS_Store
 Thumbs.db
-**/V1.osp
 **/.bash_history
 **/.bashrc
 **/*.log
 
+# Generated audio and video files
+*.wav
+*.mp3
 *.mp4
 *.osp
+*.bmp
+*.png
+*.jpg
+*.jpeg
+*.avi
+*.mkv
+*.mov
+*.flv
+*.wmv
+
