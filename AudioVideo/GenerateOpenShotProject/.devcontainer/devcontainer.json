@@ -1,0 +1,36 @@
+{
+  "name": "OpenShot Python Dev",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      // Leave these blank to install the distribution default version.
+      // To pin a version, set e.g. "LIBOPENSHOT_VERSION": "=0.2.1-1",
+      "LIBOPENSHOT_VERSION": "=0.2.7+dfsg1-4+b1",
+      "FFMPEG_VERSION": "=7:5.1.8-0+deb12u1",
+      "PYTHON_BASE_IMAGE": "mcr.microsoft.com/devcontainers/python:3.11-bookworm"
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-vscode.makefile-tools"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": true,
+        "python.formatting.provider": "black"
+      }
+    }
+  },
+  "postCreateCommand": "echo containerWorkspaceFolder=${containerWorkspaceFolder} && ls -la ${containerWorkspaceFolder} || true && if [ -f \"${containerWorkspaceFolder}/requirements.txt\" ]; then pip install -r \"${containerWorkspaceFolder}/requirements.txt\"; else echo \"requirements.txt not found at ${containerWorkspaceFolder}\"; fi",
+  "remoteUser": "root",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspace,consistency=cached"
+}

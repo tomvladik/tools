@@ -1,0 +1,7 @@
+# Pinned Python tooling used by the devcontainer
+# Leave `pip` unpinned to avoid downgrading the system-installed pip
+setuptools==68.0.0
+wheel==0.40.0
+# Add other pinned Python libs here if your project needs them
+# For example:
+# pydub==0.25.1
