@@ -186,8 +186,10 @@ def compute_photo_and_fade(slideshow_duration: float, num_photos: int, requested
     if num_photos <= 0:
         return requested_photo, min(requested_fade, requested_photo / 2)
 
-    max_per_photo = slideshow_duration / num_photos if slideshow_duration > 0 else requested_photo
-    photo_duration = min(requested_photo, max_per_photo) if max_per_photo > 0 else requested_photo
+    max_per_photo = slideshow_duration / \
+        num_photos if slideshow_duration > 0 else requested_photo
+    photo_duration = min(
+        requested_photo, max_per_photo) if max_per_photo > 0 else requested_photo
 
     # Keep fade at most half the clip so it can fit
     fade_duration = min(requested_fade, photo_duration / 2)
@@ -207,7 +209,7 @@ def render_video_with_libopenshot(
     test_run: bool = False,
 ) -> None:
     """Render video using libopenshot Timeline and FFmpegWriter (like a video editor)."""
-    
+
     # Test run settings
     if test_run:
         width, height, fps = 320, 200, 10
@@ -217,11 +219,13 @@ def render_video_with_libopenshot(
     try:
         import openshot
     except ImportError:
-        raise RuntimeError("libopenshot not installed. Install with: apt-get install python3-openshot")
-    
+        raise RuntimeError(
+            "libopenshot not installed. Install with: apt-get install python3-openshot")
+
     print("Analyzing audio file...")
     audio_duration = get_audio_duration(audio_path)
-    print(f"Audio duration: {audio_duration:.1f} seconds ({audio_duration/60:.1f} minutes)")
+    print(
+        f"Audio duration: {audio_duration:.1f} seconds ({audio_duration/60:.1f} minutes)")
 
     slideshow_start = intro_duration
     slideshow_duration = audio_duration - intro_duration - outro_duration
@@ -239,9 +243,11 @@ def render_video_with_libopenshot(
         slideshow_duration, len(photos), photo_duration, fade_duration
     )
     if effective_photo_duration != photo_duration:
-        print(f"Adjusted photo duration to {effective_photo_duration:.2f}s to fit all photos")
+        print(
+            f"Adjusted photo duration to {effective_photo_duration:.2f}s to fit all photos")
     if effective_fade_duration != fade_duration:
-        print(f"Adjusted fade duration to {effective_fade_duration:.2f}s to fit clip length")
+        print(
+            f"Adjusted fade duration to {effective_fade_duration:.2f}s to fit clip length")
 
     # Calculate photo schedule with crossfade overlaps
     print("Planning slideshow...")
@@ -251,35 +257,38 @@ def render_video_with_libopenshot(
 
     while current_time < slideshow_start + slideshow_duration:
         photo = photos[photo_index % len(photos)]
-        remaining_duration = (slideshow_start + slideshow_duration) - current_time
+        remaining_duration = (
+            slideshow_start + slideshow_duration) - current_time
         clip_duration = min(effective_photo_duration, remaining_duration)
-        
+
         photo_schedule.append({
             'file': os.path.abspath(photo),
             'start': current_time,
             'duration': clip_duration
         })
-        
+
         current_time += clip_duration
         photo_index += 1
-        
+
         progress = (((current_time - slideshow_start) / slideshow_duration) * 100
-                   if slideshow_duration > 0 else 100)
-        print(f"  Progress: {progress:.1f}% - Scheduled {os.path.basename(photo)}")
+                    if slideshow_duration > 0 else 100)
+        print(
+            f"  Progress: {progress:.1f}% - Scheduled {os.path.basename(photo)}")
 
     print(f"\nBuilding OpenShot Timeline...")
-    
+
     # Create timeline with variable resolution
-    timeline = openshot.Timeline(width, height, openshot.Fraction(fps, 1), 44100, 2, openshot.LAYOUT_STEREO)
-    
+    timeline = openshot.Timeline(width, height, openshot.Fraction(
+        fps, 1), 44100, 2, openshot.LAYOUT_STEREO)
+
     # Parse background color (hex to RGB)
     bg_hex = bg_color.lstrip('#')
     bg_r = int(bg_hex[0:2], 16)
     bg_g = int(bg_hex[2:4], 16)
     bg_b = int(bg_hex[4:6], 16)
-    
+
     # Skip background layer for now - not needed if photos fill screen
-    
+
     # Add audio clip
     print("  Adding audio track...")
     audio_clip = openshot.Clip(os.path.abspath(audio_path))
@@ -288,91 +297,97 @@ def render_video_with_libopenshot(
     audio_clip.Start(0)
     audio_clip.End(audio_duration)
     timeline.AddClip(audio_clip)
-    
+
     # Add photo clips with transitions
     print("  Adding photo clips...")
     for idx, item in enumerate(photo_schedule):
         photo_clip = openshot.Clip(item['file'])
-        photo_clip.Layer(2 + idx)  # Each photo on its own layer for transitions
+        # Each photo on its own layer for transitions
+        photo_clip.Layer(2 + idx)
         photo_clip.Position(item['start'])
         photo_clip.Start(0)
         photo_clip.End(item['duration'])
-        
+
         # Scale to fit
         photo_clip.scale = openshot.SCALE_FIT
-        
+
         # Add fade in/out if there are crossfades
         if idx > 0:
             # Fade in from previous
             photo_clip.alpha = openshot.Keyframe()
             photo_clip.alpha.AddPoint(1, 0.0)  # Start transparent
-            photo_clip.alpha.AddPoint(int(effective_fade_duration * 30), 1.0)  # Fade to opaque
-        
+            photo_clip.alpha.AddPoint(
+                int(effective_fade_duration * 30), 1.0)  # Fade to opaque
+
         if idx < len(photo_schedule) - 1:
             # Fade out to next
             end_frame = int(item['duration'] * 30)
-            start_fade_frame = int((item['duration'] - effective_fade_duration) * 30)
+            start_fade_frame = int(
+                (item['duration'] - effective_fade_duration) * 30)
             if not hasattr(photo_clip, 'alpha') or photo_clip.alpha is None:
                 photo_clip.alpha = openshot.Keyframe()
             photo_clip.alpha.AddPoint(start_fade_frame, 1.0)  # Start opaque
             photo_clip.alpha.AddPoint(end_frame, 0.0)  # Fade to transparent
-        
+
         timeline.AddClip(photo_clip)
-        
+
         progress = ((idx + 1) / len(photo_schedule)) * 100
-        print(f"    Progress: {progress:.1f}% - Added {os.path.basename(item['file'])}")
-    
+        print(
+            f"    Progress: {progress:.1f}% - Added {os.path.basename(item['file'])}")
+
     # Open timeline
     print("\nOpening timeline...")
     timeline.Open()
-    
+
     # Create FFmpegWriter for output
     print("Rendering video using libopenshot...")
     writer = openshot.FFmpegWriter(output_path)
     bitrate = 3000000 if not test_run else 1000000
     writer.SetVideoOptions(True, "libx264", openshot.Fraction(fps, 1), width, height,
-                          openshot.Fraction(1, 1), False, False, bitrate)
-    writer.SetAudioOptions(True, "aac", 44100, 2, openshot.LAYOUT_STEREO, 192000)
-    
+                           openshot.Fraction(1, 1), False, False, bitrate)
+    writer.SetAudioOptions(True, "aac", 44100, 2,
+                           openshot.LAYOUT_STEREO, 192000)
+
     # Open writer
     writer.Open()
-    
+
     # Render frames
     total_frames = int(audio_duration * 30)
     last_frame_reported = 0
-    
+
     try:
         for frame_num in range(1, total_frames + 1):
             # Get frame from timeline (this is where it might crash)
             frame = timeline.GetFrame(frame_num)
-            
+
             # Write frame
             writer.WriteFrame(frame)
-            
+
             # Report progress every 100 frames
             if frame_num - last_frame_reported >= 100:
                 percentage = int((frame_num / total_frames) * 100)
-                print(f"  Rendering: {percentage}% (frame {frame_num}/{total_frames})", flush=True)
+                print(
+                    f"  Rendering: {percentage}% (frame {frame_num}/{total_frames})", flush=True)
                 last_frame_reported = frame_num
-    
+
     except Exception as e:
         print(f"\n⚠ Warning: libopenshot rendering failed: {e}")
         print("  This is a known issue with libopenshot Timeline API stability.")
         print("  Falling back to direct FFmpeg rendering...")
         writer.Close()
         timeline.Close()
-        
+
         # Fallback to direct FFmpeg rendering
         render_video(audio_path, photos_folder, output_path, effective_photo_duration, bg_color,
-                youtube_preset, intro_duration, outro_duration, effective_fade_duration, test_run)
+                     youtube_preset, intro_duration, outro_duration, effective_fade_duration, test_run)
         return
-    
+
     # Finalize
     print(f"  Rendering: 100% (frame {total_frames}/{total_frames})")
     writer.WriteTrailer()
     writer.Close()
     timeline.Close()
-    
+
     print(f"\n✓ Video rendered successfully using libopenshot!")
     print(f"  Output: {output_path}")
     print(f"  Duration: {audio_duration/60:.1f} minutes")
@@ -391,7 +406,7 @@ def detect_best_encoder() -> tuple:
         ('h264_nvenc', []),  # NVIDIA
         ('libx264', []),  # Software fallback
     ]
-    
+
     for encoder, extra_args in encoders_to_try:
         try:
             result = subprocess.run(
@@ -400,7 +415,8 @@ def detect_best_encoder() -> tuple:
             )
             if encoder in result.stdout:
                 # Test if encoder actually works
-                test_cmd = ['ffmpeg', '-f', 'lavfi', '-i', 'color=c=black:s=64x64:d=0.1', '-an']
+                test_cmd = ['ffmpeg', '-f', 'lavfi', '-i',
+                            'color=c=black:s=64x64:d=0.1', '-an']
                 if extra_args:
                     test_cmd.extend(extra_args)
                 test_cmd.extend(['-c:v', encoder, '-f', 'null', '-'])
@@ -409,7 +425,7 @@ def detect_best_encoder() -> tuple:
                     return encoder, extra_args
         except (subprocess.TimeoutExpired, FileNotFoundError):
             continue
-    
+
     return 'libx264', []  # Software fallback
 
 
@@ -422,43 +438,48 @@ def run_ffmpeg_with_progress(cmd: List[str], total_duration: float, description:
         universal_newlines=True,
         bufsize=1
     )
-    
+
     last_frame_reported = 0
     frame_pattern = re.compile(r'frame=\s*(\d+)')
     time_pattern = re.compile(r'time=(\d+):(\d+):(\d+\.\d+)')
     fps = 30.0  # assumed fps
     total_frames = int(total_duration * fps)
-    
+
     for line in process.stdout:
         # Parse frame count from FFmpeg output
         frame_match = frame_pattern.search(line)
         time_match = time_pattern.search(line)
-        
+
         if frame_match:
             current_frame = int(frame_match.group(1))
             # Report every 100 frames
             if current_frame - last_frame_reported >= 100:
                 if total_frames > 0:
-                    percentage = min(100, int((current_frame / total_frames) * 100))
-                    print(f"  {description}: {percentage}% (frame {current_frame}/{total_frames})", flush=True)
+                    percentage = min(
+                        100, int((current_frame / total_frames) * 100))
+                    print(
+                        f"  {description}: {percentage}% (frame {current_frame}/{total_frames})", flush=True)
                 else:
                     print(f"  {description}: frame {current_frame}", flush=True)
                 last_frame_reported = current_frame
         elif time_match and total_duration > 0 and last_frame_reported == 0:
             # Fallback to time-based progress if frame info not available
             hours, minutes, seconds = time_match.groups()
-            current_time = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+            current_time = int(hours) * 3600 + \
+                int(minutes) * 60 + float(seconds)
             percentage = min(100, int((current_time / total_duration) * 100))
             if percentage % 10 == 0:
                 print(f"  {description}: {percentage}%", flush=True)
-    
+
     process.wait()
-    
+
     if process.returncode != 0:
-        raise RuntimeError(f"FFmpeg failed with exit code {process.returncode}")
-    
+        raise RuntimeError(
+            f"FFmpeg failed with exit code {process.returncode}")
+
     if total_frames > 0:
-        print(f"  {description}: 100% (frame {total_frames}/{total_frames})", flush=True)
+        print(
+            f"  {description}: 100% (frame {total_frames}/{total_frames})", flush=True)
     else:
         print(f"  {description}: 100%", flush=True)
 
@@ -476,7 +497,7 @@ def render_video(
     test_run: bool = False,
 ) -> None:
     """Render video directly using FFmpeg (bypasses buggy libopenshot Timeline API)."""
-    
+
     # Test run settings: lower resolution, faster encoding
     if test_run:
         width, height, fps = 320, 200, 10
@@ -487,10 +508,11 @@ def render_video(
         width, height, fps = 1920, 1080, 30
         encoder = None  # Will be detected
         crf, preset = 23, 'medium'
-    
+
     print("Analyzing audio file...")
     audio_duration = get_audio_duration(audio_path)
-    print(f"Audio duration: {audio_duration:.1f} seconds ({audio_duration/60:.1f} minutes)")
+    print(
+        f"Audio duration: {audio_duration:.1f} seconds ({audio_duration/60:.1f} minutes)")
 
     slideshow_start = intro_duration
     slideshow_duration = audio_duration - intro_duration - outro_duration
@@ -509,9 +531,11 @@ def render_video(
         slideshow_duration, len(photos), photo_duration, fade_duration
     )
     if effective_photo_duration != photo_duration:
-        print(f"Adjusted photo duration to {effective_photo_duration:.2f}s to fit all photos")
+        print(
+            f"Adjusted photo duration to {effective_photo_duration:.2f}s to fit all photos")
     if effective_fade_duration != fade_duration:
-        print(f"Adjusted fade duration to {effective_fade_duration:.2f}s to fit clip length")
+        print(
+            f"Adjusted fade duration to {effective_fade_duration:.2f}s to fit clip length")
 
     # Calculate how many times each photo appears
     print("Planning slideshow...")
@@ -521,26 +545,28 @@ def render_video(
 
     while current_time < slideshow_start + slideshow_duration:
         photo = photos[photo_index % len(photos)]
-        remaining_duration = (slideshow_start + slideshow_duration) - current_time
+        remaining_duration = (
+            slideshow_start + slideshow_duration) - current_time
         clip_duration = min(effective_photo_duration, remaining_duration)
-        
+
         photo_schedule.append({
             'file': os.path.abspath(photo),
             'start': current_time,
             'duration': clip_duration
         })
-        
+
         current_time += clip_duration
         photo_index += 1
-        
+
         progress = (((current_time - slideshow_start) / slideshow_duration) * 100
-                   if slideshow_duration > 0 else 100)
-        print(f"  Progress: {progress:.1f}% - Scheduled {os.path.basename(photo)}")
+                    if slideshow_duration > 0 else 100)
+        print(
+            f"  Progress: {progress:.1f}% - Scheduled {os.path.basename(photo)}")
 
     # Create temporary directory for intermediate files
     import tempfile
     temp_dir = tempfile.mkdtemp(prefix='openshot_render_')
-    
+
     # Detect best encoder (unless test mode specifies one)
     if not test_run:
         encoder, encoder_args = detect_best_encoder()
@@ -548,12 +574,13 @@ def render_video(
     else:
         encoder_args = []
         print(f"Using encoder: {encoder}")
-    
+
     try:
         # Step 1: Create video from photo slideshow with crossfades
-        print(f"\nRendering photo slideshow with {effective_fade_duration}s crossfades...")
+        print(
+            f"\nRendering photo slideshow with {effective_fade_duration}s crossfades...")
         photo_video = os.path.join(temp_dir, 'photos.mp4')
-        
+
         if len(photo_schedule) == 1:
             # Single photo - no crossfade needed
             cmd = ['ffmpeg', '-y']
@@ -570,7 +597,8 @@ def render_video(
             if encoder == 'libx264':
                 cmd.extend(['-preset', preset, '-crf', str(crf)])
             elif encoder == 'mpeg4':
-                cmd.extend(['-q:v', '15'])  # Quality 15 (lower=better, range 1-31)
+                # Quality 15 (lower=better, range 1-31)
+                cmd.extend(['-q:v', '15'])
             elif 'vaapi' in encoder:
                 cmd.extend(['-qp', '23'])
             elif 'nvenc' in encoder or 'qsv' in encoder:
@@ -581,18 +609,19 @@ def render_video(
             # Build FFmpeg command with all input files
             cmd = ['ffmpeg', '-y']
             for item in photo_schedule:
-                cmd.extend(['-loop', '1', '-t', str(item['duration']), '-i', item['file']])
-            
+                cmd.extend(
+                    ['-loop', '1', '-t', str(item['duration']), '-i', item['file']])
+
             # Build complex filter with scale, pad, and xfade
             filter_parts = []
-            
+
             # Scale and pad each input
             for i in range(len(photo_schedule)):
                 filter_parts.append(
                     f"[{i}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
                     f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={bg_color},setsar=1[v{i}]"
                 )
-            
+
             # Apply xfade transitions between consecutive videos
             # xfade offset is cumulative from the start of the output stream
             current_label = 'v0'
@@ -600,16 +629,18 @@ def render_video(
             for i in range(1, len(photo_schedule)):
                 # Offset is when the transition should start in the output timeline
                 # This is: previous clip duration(s) minus all the fade overlaps so far
-                cumulative_offset += photo_schedule[i-1]['duration'] - effective_fade_duration
+                cumulative_offset += photo_schedule[i -
+                                                    1]['duration'] - effective_fade_duration
                 next_label = f'v{i}x' if i < len(photo_schedule) - 1 else 'out'
                 filter_parts.append(
                     f"[{current_label}][v{i}]xfade=transition=fade:duration={effective_fade_duration}:offset={cumulative_offset}[{next_label}]"
                 )
                 current_label = next_label
-            
+
             filter_complex = ';'.join(filter_parts)
-            
-            cmd.extend(['-filter_complex', filter_complex, '-map', '[out]', '-r', str(fps), '-c:v', encoder])
+
+            cmd.extend(['-filter_complex', filter_complex, '-map',
+                       '[out]', '-r', str(fps), '-c:v', encoder])
             if encoder == 'libx264':
                 cmd.extend(['-preset', preset, '-crf', str(crf)])
             elif encoder == 'mpeg4':
@@ -619,7 +650,7 @@ def render_video(
             elif 'nvenc' in encoder or 'qsv' in encoder:
                 cmd.extend(['-preset', 'medium', '-cq', '23'])
             cmd.extend(['-pix_fmt', 'yuv420p', photo_video])
-        
+
         # Calculate total duration for progress tracking
         total_photo_duration = sum(p['duration'] for p in photo_schedule)
         print(f"  Total photo slideshow duration: {total_photo_duration:.1f}s")
@@ -627,29 +658,32 @@ def render_video(
         old_fps = 30.0
         cmd_fps = fps
         run_ffmpeg_with_progress(cmd, total_photo_duration, "Rendering photos")
-        
+
         # Verify created video duration
         probe_result = subprocess.run(
-            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', 
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
              '-of', 'default=noprint_wrappers=1:nokey=1', photo_video],
             capture_output=True, text=True
         )
-        actual_duration = float(probe_result.stdout.strip()) if probe_result.returncode == 0 else 0
+        actual_duration = float(
+            probe_result.stdout.strip()) if probe_result.returncode == 0 else 0
         print(f"  Actual photo video duration: {actual_duration:.1f}s")
-        
+
         # Step 2: Add silence periods if needed (intro/outro)
         video_with_timing = photo_video
         if intro_duration > 0 or outro_duration > 0:
             print(f"\nAdding intro/outro timing...")
             # Create black frames for intro/outro
             timed_video = os.path.join(temp_dir, 'timed.mp4')
-            
+
             filter_parts = []
             if intro_duration > 0:
-                filter_parts.append(f"color=c={bg_color}:s={width}x{height}:d={intro_duration}:r={fps}[intro]")
+                filter_parts.append(
+                    f"color=c={bg_color}:s={width}x{height}:d={intro_duration}:r={fps}[intro]")
             if outro_duration > 0:
-                filter_parts.append(f"color=c={bg_color}:s={width}x{height}:d={outro_duration}:r={fps}[outro]")
-            
+                filter_parts.append(
+                    f"color=c={bg_color}:s={width}x{height}:d={outro_duration}:r={fps}[outro]")
+
             # Build concat filter
             inputs = []
             if intro_duration > 0:
@@ -657,10 +691,11 @@ def render_video(
             inputs.append('[0:v]')
             if outro_duration > 0:
                 inputs.append('[outro]')
-            
+
             concat_filter = f"{''.join(inputs)}concat=n={len(inputs)}:v=1:a=0[outv]"
-            full_filter = ';'.join(filter_parts + [concat_filter]) if filter_parts else concat_filter
-            
+            full_filter = ';'.join(
+                filter_parts + [concat_filter]) if filter_parts else concat_filter
+
             cmd = ['ffmpeg', '-y']
             if encoder_args:
                 cmd.extend(encoder_args)
@@ -679,36 +714,38 @@ def render_video(
             elif 'nvenc' in encoder or 'qsv' in encoder:
                 cmd.extend(['-preset', 'medium', '-cq', '23'])
             cmd.extend(['-pix_fmt', 'yuv420p', timed_video])
-            
+
             run_ffmpeg_with_progress(cmd, audio_duration, "Adding intro/outro")
-            
+
             video_with_timing = timed_video
-        
+
         # Step 3: Combine with audio
         print(f"\nCombining video with audio...")
-        
+
         # First verify intermediate video duration
         probe_result = subprocess.run(
-            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', 
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
              '-of', 'default=noprint_wrappers=1:nokey=1', video_with_timing],
             capture_output=True, text=True
         )
-        video_duration = float(probe_result.stdout.strip()) if probe_result.returncode == 0 else 0
+        video_duration = float(probe_result.stdout.strip()
+                               ) if probe_result.returncode == 0 else 0
         print(f"  Intermediate video duration: {video_duration:.1f}s")
-        
+
         # If video is shorter than audio, loop it
         if video_duration < audio_duration - 0.1:  # Small tolerance for rounding
-            print(f"  Extending video to match audio duration ({audio_duration:.1f}s)...")
+            print(
+                f"  Extending video to match audio duration ({audio_duration:.1f}s)...")
             extended_video = os.path.join(temp_dir, 'extended.mp4')
             # Calculate how many loops needed
             loops_needed = int(audio_duration / video_duration) + 1
-            
+
             # Create concat file
             concat_file = os.path.join(temp_dir, 'concat.txt')
             with open(concat_file, 'w') as f:
                 for _ in range(loops_needed):
                     f.write(f"file '{video_with_timing}'\n")
-            
+
             cmd_extend = [
                 'ffmpeg', '-y',
                 '-f', 'concat',
@@ -720,7 +757,7 @@ def render_video(
             ]
             subprocess.run(cmd_extend, capture_output=True)
             video_with_timing = extended_video
-        
+
         cmd = [
             'ffmpeg', '-y',
             '-i', video_with_timing,
@@ -731,9 +768,9 @@ def render_video(
             '-shortest',
             output_path
         ]
-        
+
         run_ffmpeg_with_progress(cmd, audio_duration, "Merging audio")
-        
+
         print(f"\n✓ Video rendered successfully!")
         print(f"  Output: {output_path}")
         print(f"  Duration: {audio_duration/60:.1f} minutes")
@@ -741,7 +778,7 @@ def render_video(
         if test_run:
             print(f"  Mode: TEST RUN (draft quality)")
         print(f"  Photos used: {len(photo_schedule)}")
-        
+
     finally:
         # Clean up temp files
         import shutil
@@ -773,7 +810,8 @@ def create_openshot_project(
         openshot = _openshot
         openshot_version = getattr(openshot, "OPENSHOT_VERSION_FULL", "0.2.7")
     except ImportError:
-        raise RuntimeError("libopenshot not installed. Install python3-openshot in the devcontainer.")
+        raise RuntimeError(
+            "libopenshot not installed. Install python3-openshot in the devcontainer.")
 
     # Get audio duration
     print("Analyzing audio file...")
@@ -798,12 +836,14 @@ def create_openshot_project(
         if total_io > audio_duration * 0.8:  # If intro+outro > 80% of audio
             # Scale them down to fit 60% of audio
             scale = (audio_duration * 0.6) / total_io
-            intro_duration = max(5, int(intro_duration * scale))  # Keep at least 5s
+            # Keep at least 5s
+            intro_duration = max(5, int(intro_duration * scale))
             outro_duration = max(5, int(outro_duration * scale))
             slideshow_start = intro_duration
             slideshow_duration = audio_duration - intro_duration - outro_duration
-            print(f"Auto-adjusted intro to {intro_duration}s, outro to {outro_duration}s")
-    
+            print(
+                f"Auto-adjusted intro to {intro_duration}s, outro to {outro_duration}s")
+
     if slideshow_duration < 0:
         raise ValueError(
             f"Intro ({intro_duration}s) + Outro ({outro_duration}s) exceeds audio duration ({audio_duration}s)"
@@ -818,9 +858,11 @@ def create_openshot_project(
         slideshow_duration, len(photos), photo_duration, crossfade_duration
     )
     if effective_photo_duration != photo_duration:
-        print(f"Adjusted photo duration to {effective_photo_duration:.2f}s to fit all photos")
+        print(
+            f"Adjusted photo duration to {effective_photo_duration:.2f}s to fit all photos")
     if effective_fade_duration != crossfade_duration:
-        print(f"Adjusted transition duration to {effective_fade_duration:.2f}s to fit clip length")
+        print(
+            f"Adjusted transition duration to {effective_fade_duration:.2f}s to fit clip length")
 
     # We'll create the .osp file manually as JSON
     # (OpenShot project files are JSON, not binary)
@@ -843,7 +885,7 @@ def create_openshot_project(
         clip_duration = min(effective_photo_duration, remaining_duration)
 
         # Photos will be added to JSON structure during save
-        
+
         current_time += clip_duration
         clip_counter += 1
         photo_index += 1
@@ -857,7 +899,7 @@ def create_openshot_project(
 
     # Save project as JSON (OpenShot .osp format)
     print(f"\nSaving project to: {output_path}")
-    
+
     # Create OpenShot project structure (optionally using libopenshot for clip JSON)
     # .osp files are JSON with specific structure for OpenShot
     # Keep a dedicated layer for audio and one shared layer for all photos so timeline stays tidy.
@@ -879,8 +921,10 @@ def create_openshot_project(
         "playhead_position": 0,
         "profile": "HD 1080p 30 fps",
         "layers": [
-            {"id": str(uuid.uuid4()), "number": photo_layer, "y": 0, "label": "Photos", "lock": False},
-            {"id": str(uuid.uuid4()), "number": audio_layer, "y": 0, "label": "Audio", "lock": False}
+            {"id": str(uuid.uuid4()), "number": photo_layer,
+             "y": 0, "label": "Photos", "lock": False},
+            {"id": str(uuid.uuid4()), "number": audio_layer,
+             "y": 0, "label": "Audio", "lock": False}
         ],
         # Add explicit timing/ratio metadata expected by newer OpenShot builds
         "fps": {"num": 30, "den": 1},
@@ -895,10 +939,10 @@ def create_openshot_project(
         "history": {"undo": [], "redo": []},
         "export_path": ""
     }
-    
+
     # Calculate relative paths from OSP file location for portability
     osp_dir = os.path.dirname(os.path.abspath(output_path))
-    
+
     def get_portable_path(file_path):
         """Get path relative to OSP file if possible, otherwise absolute."""
         abs_path = os.path.abspath(file_path)
@@ -911,7 +955,7 @@ def create_openshot_project(
             # Different drives on Windows
             pass
         return abs_path
-    
+
     def _openshot_json(obj: Any) -> Optional[Dict[str, Any]]:
         if obj is None:
             return None
@@ -994,7 +1038,7 @@ def create_openshot_project(
         }
     }
     project_data["files"].append(audio_file_data)
-    
+
     # Add audio clip
     audio_clip_data = {
         "id": str(uuid.uuid4()),
@@ -1035,32 +1079,33 @@ def create_openshot_project(
         )
         audio_clip_data = audio_clip_json
     project_data["clips"].append(audio_clip_data)
-    
+
     # Calculate photo schedule with overlaps for crossfades
     photo_clips = []
     current_time = slideshow_start
     photo_index = 0
-    
+
     while current_time < slideshow_start + slideshow_duration:
         photo = photos[photo_index % len(photos)]
-        remaining_duration = (slideshow_start + slideshow_duration) - current_time
+        remaining_duration = (
+            slideshow_start + slideshow_duration) - current_time
         clip_duration = min(effective_photo_duration, remaining_duration)
-        
+
         photo_clips.append({
             'photo': photo,
             'position': current_time,
             'duration': clip_duration,
             'index': photo_index
         })
-        
+
         current_time += clip_duration
         photo_index += 1
-    
+
     # Add photo files and clips with proper positioning for crossfades
     clip_objects = []
     for idx, item in enumerate(photo_clips):
         photo = item['photo']
-        
+
         photo_file_data = {
             "id": str(uuid.uuid4()),
             "path": get_portable_path(photo),
@@ -1078,14 +1123,14 @@ def create_openshot_project(
             }
         }
         project_data["files"].append(photo_file_data)
-        
+
         # For crossfades, clips need to overlap
         # Extend clip duration to include crossfade with next clip
         clip_duration = item['duration']
         if idx < len(photo_clips) - 1:
             # Extend to overlap with next clip
             clip_duration += effective_fade_duration
-        
+
         photo_clip_data = {
             "id": str(uuid.uuid4()),
             "file_id": photo_file_data["id"],
@@ -1130,16 +1175,16 @@ def create_openshot_project(
             photo_clip_data = photo_clip_json
         project_data["clips"].append(photo_clip_data)
         clip_objects.append(photo_clip_data)
-    
+
     # Add fade transitions between consecutive photos
     for idx in range(len(clip_objects) - 1):
         current_clip = clip_objects[idx]
         next_clip = clip_objects[idx + 1]
-        
+
         # Transition occurs during the overlap period
         # Position: where next clip starts (which is overlap region start)
         transition_position = photo_clips[idx + 1]['position']
-        
+
         transition_data = {
             "id": str(uuid.uuid4()),
             "layer": photo_layer,
@@ -1157,7 +1202,7 @@ def create_openshot_project(
             "replace_image": False
         }
         project_data["effects"].append(transition_data)
-    
+
     # Mirror timeline data for OpenShot 3.x compatibility
     project_data["timeline"] = {
         "clips": project_data["clips"],
@@ -1185,7 +1230,8 @@ def create_openshot_project(
     print(f"  Total duration: {audio_duration/60:.1f} minutes")
     print(f"  Slideshow: {slideshow_duration/60:.1f} minutes")
     print(f"  Photos used: {len(photo_clips)}")
-    print(f"  Transitions: {len(photo_clips) - 1} crossfades ({effective_fade_duration}s each)")
+    print(
+        f"  Transitions: {len(photo_clips) - 1} crossfades ({effective_fade_duration}s each)")
     print(f"  Resolution: 1920x1080 @ 30fps")
     print(f"  Background color: {bg_color}")
     if youtube_preset:
@@ -1360,7 +1406,7 @@ Examples:
                     args.trim_end,
                 )
                 print()
-            
+
             # Render video directly
             if args.use_libopenshot:
                 # Use libopenshot Timeline rendering (like a video editor)
