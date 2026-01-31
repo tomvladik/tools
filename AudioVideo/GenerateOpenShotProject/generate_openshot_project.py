@@ -28,13 +28,194 @@ import io
 import uuid
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
+import shutil
+import platform
+
+
+def get_tool_versions() -> Dict[str, str]:
+    """Return versions of key tools as a dict, plus OS info."""
+    versions: Dict[str, str] = {}
+    versions["python"] = platform.python_version()
+    versions["python_executable"] = sys.executable
+
+    # OS info (try /etc/os-release first)
+    os_pretty = None
+    try:
+        if os.path.exists("/etc/os-release"):
+            with open("/etc/os-release", "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("PRETTY_NAME="):
+                        os_pretty = line.strip().split("=", 1)[1].strip().strip('"')
+                        break
+    except Exception:
+        os_pretty = None
+
+    versions["os"] = os_pretty or platform.platform()
+    versions["kernel"] = platform.release()
+    versions["machine"] = platform.machine()
+
+    # ffmpeg
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        try:
+            result = subprocess.run(
+                ["ffmpeg", "-version"], capture_output=True, text=True, check=True
+            )
+            versions["ffmpeg"] = result.stdout.splitlines()[0]
+            versions["ffmpeg_path"] = ffmpeg_path
+        except Exception as e:
+            versions["ffmpeg"] = f"error: {e}"
+            versions["ffmpeg_path"] = ffmpeg_path
+    else:
+        versions["ffmpeg"] = "not found"
+        versions["ffmpeg_path"] = "n/a"
+
+    # ffprobe
+    ffprobe_path = shutil.which("ffprobe")
+    if ffprobe_path:
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-version"], capture_output=True, text=True, check=True
+            )
+            versions["ffprobe"] = result.stdout.splitlines()[0]
+            versions["ffprobe_path"] = ffprobe_path
+        except Exception as e:
+            versions["ffprobe"] = f"error: {e}"
+            versions["ffprobe_path"] = ffprobe_path
+    else:
+        versions["ffprobe"] = "not found"
+        versions["ffprobe_path"] = "n/a"
+
+    # git
+    git_path = shutil.which("git")
+    if git_path:
+        try:
+            result = subprocess.run(
+                ["git", "--version"], capture_output=True, text=True, check=True
+            )
+            versions["git"] = result.stdout.strip()
+            versions["git_path"] = git_path
+        except Exception as e:
+            versions["git"] = f"error: {e}"
+            versions["git_path"] = git_path
+    else:
+        versions["git"] = "not found"
+        versions["git_path"] = "n/a"
+
+    # docker
+    docker_path = shutil.which("docker")
+    if docker_path:
+        try:
+            result = subprocess.run(
+                ["docker", "--version"], capture_output=True, text=True, check=True
+            )
+            versions["docker"] = result.stdout.strip()
+            versions["docker_path"] = docker_path
+        except Exception as e:
+            versions["docker"] = f"error: {e}"
+            versions["docker_path"] = docker_path
+    else:
+        versions["docker"] = "not found"
+        versions["docker_path"] = "n/a"
+
+    # docker-compose (try both standalone and 'docker compose')
+    dc_path = shutil.which("docker-compose")
+    if dc_path:
+        try:
+            result = subprocess.run(
+                ["docker-compose", "--version"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            versions["docker_compose"] = result.stdout.strip()
+            versions["docker_compose_path"] = dc_path
+        except Exception as e:
+            versions["docker_compose"] = f"error: {e}"
+            versions["docker_compose_path"] = dc_path
+    else:
+        # try 'docker compose version'
+        if docker_path:
+            try:
+                result = subprocess.run(
+                    ["docker", "compose", "version"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                versions["docker_compose"] = result.stdout.splitlines()[0]
+                versions["docker_compose_path"] = docker_path + " (docker compose)"
+            except Exception:
+                versions["docker_compose"] = "not found"
+                versions["docker_compose_path"] = "n/a"
+        else:
+            versions["docker_compose"] = "not found"
+            versions["docker_compose_path"] = "n/a"
+
+    # gh (GitHub CLI)
+    gh_path = shutil.which("gh")
+    if gh_path:
+        try:
+            result = subprocess.run(
+                ["gh", "--version"], capture_output=True, text=True, check=True
+            )
+            # gh prints multiple lines; capture the first line.
+            versions["gh"] = result.stdout.splitlines()[0]
+            versions["gh_path"] = gh_path
+        except Exception as e:
+            versions["gh"] = f"error: {e}"
+            versions["gh_path"] = gh_path
+    else:
+        versions["gh"] = "not found"
+        versions["gh_path"] = "n/a"
+
+    # openshot
+    try:
+        import openshot as _openshot
+
+        ver = getattr(_openshot, "__version__", None)
+        if not ver:
+            ver = getattr(_openshot, "LibraryVersion", None)
+        versions["openshot"] = ver or "unknown"
+    except Exception:
+        versions["openshot"] = "not installed"
+
+    return versions
+
+
+def print_versions(versions: Dict[str, str]) -> None:
+    """Print a human-readable summary of tool versions."""
+    print("Tool versions:")
+    print(
+        f"  OS: {versions.get('os')} | kernel: {versions.get('kernel')} | machine: {versions.get('machine')}"
+    )
+    print(
+        f"  Python: {versions.get('python')} (executable: {versions.get('python_executable')})"
+    )
+    print(f"  ffmpeg: {versions.get('ffmpeg')} (path: {versions.get('ffmpeg_path')})")
+    print(
+        f"  ffprobe: {versions.get('ffprobe')} (path: {versions.get('ffprobe_path')})"
+    )
+    print(f"  git: {versions.get('git')} (path: {versions.get('git_path')})")
+    print(f"  docker: {versions.get('docker')} (path: {versions.get('docker_path')})")
+    print(
+        f"  docker-compose: {versions.get('docker_compose')} (path: {versions.get('docker_compose_path')})"
+    )
+    print(f"  gh: {versions.get('gh')} (path: {versions.get('gh_path')})")
+    print(f"  libopenshot: {versions.get('openshot')}")
 
 
 def get_audio_duration(audio_path: str) -> float:
-    """Get audio duration in seconds using FFprobe."""
-    try:
+    """Get audio duration in seconds using ffprobe or fall back to ffmpeg parsing.
+
+    This supports Windows and Linux by looking for an available binary with shutil.which.
+    """
+    import re
+
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe:
         cmd = [
-            "ffprobe",
+            ffprobe,
             "-v",
             "error",
             "-show_entries",
@@ -43,15 +224,34 @@ def get_audio_duration(audio_path: str) -> float:
             "default=noprint_wrappers=1:nokey=1",
             audio_path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        duration = float(result.stdout.strip())
-        return duration
-    except FileNotFoundError:
-        raise ValueError(
-            "Error: FFmpeg/FFprobe not found. Install FFmpeg from https://ffmpeg.org/download.html"
-        )
-    except (subprocess.CalledProcessError, ValueError) as e:
-        raise ValueError(f"Failed to read audio duration: {e}")
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            duration = float(result.stdout.strip())
+            return duration
+        except (subprocess.CalledProcessError, ValueError) as e:
+            raise ValueError(f"ffprobe failed to read audio duration: {e}")
+
+    # If ffprobe not available, try ffmpeg -i <file> and parse stderr 'Duration: '
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg:
+        cmd = [ffmpeg, "-i", audio_path]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            # ffmpeg prints info to stderr
+            stderr = result.stderr or ""
+            m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", stderr)
+            if m:
+                hours = float(m.group(1))
+                minutes = float(m.group(2))
+                seconds = float(m.group(3))
+                return hours * 3600 + minutes * 60 + seconds
+            raise ValueError("ffmpeg did not report a Duration in its output")
+        except Exception as e:
+            raise ValueError(f"ffmpeg failed to read audio duration: {e}")
+
+    raise ValueError(
+        "Error: Neither ffprobe nor ffmpeg were found. Install FFmpeg (which includes ffprobe) from https://ffmpeg.org/download.html"
+    )
 
 
 def get_sorted_photos(photos_folder: str) -> List[str]:
@@ -90,21 +290,27 @@ def create_openshot_project(
     try:
         import openshot
     except ImportError:
-        print("Error: libopenshot not available.")
-        print("\nTo use this script, you need libopenshot installed.")
+        print("Error: libopenshot (Python bindings) not available.")
+        print("\nTo use this script you need libopenshot installed.")
         print("\nOptions:")
         print("1. Use VS Code Dev Container (recommended):")
         print("   - Install 'Dev Containers' extension in VS Code")
         print(
             "   - Press Ctrl+Shift+P and select 'Dev Containers: Reopen in Container'"
         )
-        print("\n2. Install on Linux/WSL2:")
-        print("   sudo apt-get install libopenshot python3-openshot")
-        print("\n3. Install on macOS:")
-        print("   brew install libopenshot")
+        if platform.system() == "Windows":
+            print(
+                "\n2. On Windows: libopenshot is not available via pip. Use WSL2 or a container, or install OpenShot on your system and use the generated .osp file in the GUI."
+            )
+        elif platform.system() == "Darwin":
+            print("\n2. On macOS: brew install libopenshot")
+        else:
+            print(
+                "\n2. On Linux/WSL2: sudo apt-get install libopenshot python3-openshot"
+            )
         sys.exit(1)
 
-    # Get audio duration
+    # Analyze audio, compute timeline and gather photos
     print("Analyzing audio file...")
     audio_duration = get_audio_duration(audio_path)
     print(
@@ -114,32 +320,6 @@ def create_openshot_project(
     # Calculate timeline
     slideshow_start = intro_duration
     slideshow_duration = audio_duration - intro_duration - outro_duration
-
-    if slideshow_duration < 0:
-        raise ValueError(
-            f"Intro ({intro_duration}s) + Outro ({outro_duration}s) exceeds audio duration ({audio_duration}s)"
-        )
-
-    # Get photos
-    print("Scanning photos folder...")
-    photos = get_sorted_photos(photos_folder)
-    print(f"Found {len(photos)} photos")
-
-    # Create OpenShot project
-    print("Creating OpenShot project...")
-    project = openshot.Project()
-
-    # Get audio duration
-    print("Analyzing audio file...")
-    audio_duration = get_audio_duration(audio_path)
-    print(
-        f"Audio duration: {audio_duration:.1f} seconds ({audio_duration/60:.1f} minutes)"
-    )
-
-    # Calculate timeline
-    slideshow_start = intro_duration
-    slideshow_duration = audio_duration - intro_duration - outro_duration
-
     if slideshow_duration < 0:
         raise ValueError(
             f"Intro ({intro_duration}s) + Outro ({outro_duration}s) exceeds audio duration ({audio_duration}s)"
@@ -208,6 +388,9 @@ def create_openshot_project(
 
     # Save project
     print(f"\nSaving project to: {output_path}")
+    out_dir = Path(output_path).parent
+    if out_dir and not out_dir.exists():
+        out_dir.mkdir(parents=True, exist_ok=True)
     project.Save(output_path)
 
     print("✓ Project file created successfully!")
@@ -217,10 +400,6 @@ def create_openshot_project(
     print(f"  Outro: {outro_duration/60:.0f} minute")
     print(f"  Photos used: {len(photos)}")
     print(f"  Resolution: 1920x1080 @ 30fps")
-    print(f"  Intro (title screen): {intro_duration/60:.0f} minutes")
-    print(f"  Slideshow (photos): {slideshow_duration/60:.1f} minutes")
-    print(f"  Outro (title screen): {outro_duration/60:.0f} minute")
-    print(f"  Photos used: {len(photos)}")
     print(f"  Background color: {bg_color}")
     if youtube_preset:
         print("  Export settings: YouTube optimized (1080p 30fps, H.264/AAC)")
@@ -228,10 +407,26 @@ def create_openshot_project(
 
 def main():
     """Parse arguments and create project."""
+    # Gather versions early so we can display them in the help epilog
+    _versions = get_tool_versions()
+    versions_epilog = (
+        "\nCurrent environment:\n"
+        f"  OS: {_versions.get('os')} | kernel: {_versions.get('kernel')} | machine: {_versions.get('machine')}\n"
+        f"  Python: {_versions.get('python')}\n"
+        f"  ffmpeg: {_versions.get('ffmpeg')}\n"
+        f"  ffprobe: {_versions.get('ffprobe')}\n"
+        f"  git: {_versions.get('git')}\n"
+        f"  docker: {_versions.get('docker')}\n"
+        f"  docker-compose: {_versions.get('docker_compose')}\n"
+        f"  gh: {_versions.get('gh')}\n"
+        f"  libopenshot: {_versions.get('openshot')}\n"
+    )
+
     parser = argparse.ArgumentParser(
         description="Generate an Openshot project from audio and photos",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=versions_epilog
+        + """
 Examples:
   python generate_openshot_project.py lecture.mp3 ./photos/ output.osp
   python generate_openshot_project.py --photo-duration 180 song.wav ./images/ project.osp
@@ -241,6 +436,19 @@ Examples:
     parser.add_argument("audio_file", help="Path to audio file (WAV, MP3)")
     parser.add_argument("photos_folder", help="Path to folder containing photos")
     parser.add_argument("output_project", help="Path for output Openshot project file")
+    parser.add_argument(
+        "--versions",
+        "--version",
+        "-V",
+        action="store_true",
+        dest="versions",
+        help="Print current versions of key utilities used by this script and exit.",
+    )
+
+    # Allow --versions / --version / -V to be used standalone (without requiring positional args)
+    if any(flag in sys.argv for flag in ("--versions", "--version", "-V")):
+        print_versions(get_tool_versions())
+        sys.exit(0)
     parser.add_argument(
         "--photo-duration",
         type=int,
