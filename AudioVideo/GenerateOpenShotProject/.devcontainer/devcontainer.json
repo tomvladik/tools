@@ -27,7 +27,7 @@
       }
     }
   },
-  "postCreateCommand": "echo containerWorkspaceFolder=${containerWorkspaceFolder} && ls -la ${containerWorkspaceFolder} || true && if [ -f \"${containerWorkspaceFolder}/requirements.txt\" ]; then pip install -r \"${containerWorkspaceFolder}/requirements.txt\"; else echo \"requirements.txt not found at ${containerWorkspaceFolder}\"; fi",
+  "postCreateCommand": "./.devcontainer/post-create.sh",
   "remoteUser": "root",
   "workspaceFolder": "/workspace",
   "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspace,consistency=cached"

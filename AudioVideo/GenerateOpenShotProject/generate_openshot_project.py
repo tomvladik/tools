@@ -45,7 +45,8 @@ def get_tool_versions() -> Dict[str, str]:
             with open("/etc/os-release", "r", encoding="utf-8") as f:
                 for line in f:
                     if line.startswith("PRETTY_NAME="):
-                        os_pretty = line.strip().split("=", 1)[1].strip().strip('"')
+                        os_pretty = line.strip().split(
+                            "=", 1)[1].strip().strip('"')
                         break
     except Exception:
         os_pretty = None
@@ -109,7 +110,8 @@ def print_versions(versions: Dict[str, str]) -> None:
     print(
         f"  Python: {versions.get('python')} (executable: {versions.get('python_executable')})"
     )
-    print(f"  ffmpeg: {versions.get('ffmpeg')} (path: {versions.get('ffmpeg_path')})")
+    print(
+        f"  ffmpeg: {versions.get('ffmpeg')} (path: {versions.get('ffmpeg_path')})")
     print(
         f"  ffprobe: {versions.get('ffprobe')} (path: {versions.get('ffprobe_path')})"
     )
@@ -130,7 +132,8 @@ def get_audio_duration(audio_path: str) -> float:
             "default=noprint_wrappers=1:nokey=1",
             audio_path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=True)
         duration = float(result.stdout.strip())
         return duration
     except FileNotFoundError:
@@ -189,6 +192,17 @@ def create_openshot_project(
         print("   sudo apt-get install libopenshot python3-openshot")
         print("\n3. Install on macOS:")
         print("   brew install libopenshot")
+        sys.exit(1)
+
+    # Check that the 'openshot' module provides the high-level Project API
+    if not hasattr(openshot, "Project"):
+        print("Error: The installed 'openshot' Python module does not provide the required 'Project' API.")
+        print("It appears you have lower-level OpenShot bindings (classes like Timeline, Clip) but not the Project/Save API used by this script.")
+        print("Possible fixes:")
+        print("  - On Debian/Ubuntu: sudo apt-get install libopenshot python3-openshot")
+        print("  - Use the recommended VS Code Dev Container (see --help for details)")
+        print("  - Build and install libopenshot/python bindings from source if needed")
+        print("For debugging, run: ./generate_openshot_project.py --versions")
         sys.exit(1)
 
     # Get audio duration
@@ -265,7 +279,8 @@ def create_openshot_project(
     while current_time < slideshow_start + slideshow_duration:
         photo = photos[photo_index % len(photos)]
 
-        remaining_duration = (slideshow_start + slideshow_duration) - current_time
+        remaining_duration = (
+            slideshow_start + slideshow_duration) - current_time
         clip_duration = min(photo_duration, remaining_duration)
 
         # Create photo clip
@@ -339,8 +354,10 @@ Examples:
     )
 
     parser.add_argument("audio_file", help="Path to audio file (WAV, MP3)")
-    parser.add_argument("photos_folder", help="Path to folder containing photos")
-    parser.add_argument("output_project", help="Path for output Openshot project file")
+    parser.add_argument(
+        "photos_folder", help="Path to folder containing photos")
+    parser.add_argument(
+        "output_project", help="Path for output Openshot project file")
     parser.add_argument(
         "--versions",
         action="store_true",
@@ -410,11 +427,13 @@ Examples:
 
     # Validate inputs
     if not os.path.exists(args.audio_file):
-        print(f"Error: Audio file not found: {args.audio_file}", file=sys.stderr)
+        print(
+            f"Error: Audio file not found: {args.audio_file}", file=sys.stderr)
         sys.exit(1)
 
     if not os.path.isdir(args.photos_folder):
-        print(f"Error: Photos folder not found: {args.photos_folder}", file=sys.stderr)
+        print(
+            f"Error: Photos folder not found: {args.photos_folder}", file=sys.stderr)
         sys.exit(1)
 
     try:

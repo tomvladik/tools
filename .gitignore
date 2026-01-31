@@ -19,3 +19,7 @@ venv/
 # OS files
 .DS_Store
 Thumbs.db
+**/V1.osp
+**/.bash_history
+**/.bashrc
+**/*.log
