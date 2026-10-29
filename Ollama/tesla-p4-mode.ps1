@@ -95,7 +95,7 @@ function Backup-Key($key, $suffix) {
     Write-Host "Backup saved: $file"
 }
 
-function Ask-Restart {
+function Request-Restart {
     $answer = Read-Host 'Change will take effect after restart. Restart now? (y/N)'
     if ($answer -match '^[yY]') { Restart-Computer -Force }
 }
@@ -132,7 +132,7 @@ function Set-Mode {
 
     Show-Status $key
     Backup-Key $key 'NEW'
-    Ask-Restart
+    Request-Restart
 }
 
 switch ($Mode) {
