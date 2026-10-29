@@ -58,7 +58,8 @@ def get_tool_versions() -> Dict[str, str]:
             with open("/etc/os-release", "r", encoding="utf-8") as f:
                 for line in f:
                     if line.startswith("PRETTY_NAME="):
-                        os_pretty = line.strip().split("=", 1)[1].strip().strip('"')
+                        os_pretty = line.strip().split(
+                            "=", 1)[1].strip().strip('"')
                         break
     except Exception:
         os_pretty = None
@@ -124,7 +125,8 @@ def print_versions(versions: Dict[str, str]) -> None:
     print(
         f"  Python: {versions.get('python')} (executable: {versions.get('python_executable')})"
     )
-    print(f"  ffmpeg: {versions.get('ffmpeg')} (path: {versions.get('ffmpeg_path')})")
+    print(
+        f"  ffmpeg: {versions.get('ffmpeg')} (path: {versions.get('ffmpeg_path')})")
     print(
         f"  ffprobe: {versions.get('ffprobe')} (path: {versions.get('ffprobe_path')})"
     )
@@ -145,7 +147,8 @@ def get_audio_duration(audio_path: str) -> float:
             "default=noprint_wrappers=1:nokey=1",
             audio_path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=True)
         duration = float(result.stdout.strip())
         return duration
     except FileNotFoundError:
@@ -201,6 +204,52 @@ def compute_photo_and_fade(
     return photo_duration, fade_duration
 
 
+def generate_crossfade_effects(
+    clips: List[Dict[str, Any]], fps, fade_duration: float = 2.0, layer: int = 2000000
+) -> List[Dict[str, Any]]:
+    """
+    Generate OpenShot Mask transition effect objects (crossfades) between consecutive clips.
+
+    clips: list of clip dicts that contain at least `position` and `duration` keys.
+    fade_duration: duration of each crossfade in seconds.
+    layer: layer number where transitions should be placed (should match clips' layer).
+    """
+    effects: List[Dict[str, Any]] = []
+
+    # Sort by timeline position to be safe
+    clips_sorted = sorted(clips, key=lambda c: c.get("position", 0))
+
+    for i in range(len(clips_sorted) - 1):
+        a = clips_sorted[i]
+        b = clips_sorted[i + 1]
+
+        # Transition should start at the moment the next clip begins
+        transition_pos = b.get("position", 0.0)
+
+        effect = {
+            "id": str(uuid.uuid4()),
+            "type": "Mask",
+            "layer": layer,
+            "position": transition_pos,
+            "start": 0.0,
+            "end": float(fade_duration),
+            "duration": float(fade_duration),
+            "brightness": {
+                "Points": [
+                    {"co": {"X": 1, "Y": 1}, "interpolation": 0},
+                    {"co": {"X": fade_duration * fps, "Y": -1}, "interpolation": 0},
+                ]
+            },
+            "contrast": {"Points": [{"co": {"X": 1, "Y": 3}, "interpolation": 0}]},
+            "reader": {"type": "QtImageReader", "path": "@transitions/common/fade.svg"},
+            "replace_image": False,
+        }
+
+        effects.append(effect)
+
+    return effects
+
+
 def render_video_with_libopenshot(
     audio_path: str,
     photos_folder: str,
@@ -244,7 +293,9 @@ def render_video_with_libopenshot(
             f"Trim values (start={trim_start}s, end={trim_end}s) exceed audio duration ({audio_duration:.1f}s)"
         )
     if trim_start > 0 or trim_end > 0:
-        print(f"Audio trimmed: {trim_start}s from start, {trim_end}s from end → {effective_audio_duration:.1f}s")
+        print(
+            f"Audio trimmed: {trim_start}s from start, {trim_end}s from end → {effective_audio_duration:.1f}s"
+        )
 
     slideshow_start = intro_duration
     slideshow_duration = effective_audio_duration - intro_duration - outro_duration
@@ -293,7 +344,8 @@ def render_video_with_libopenshot(
         if no_repeat and photo_index >= len(photos):
             break
         photo = photos[photo_index % len(photos)]
-        remaining_duration = (slideshow_start + slideshow_duration) - current_time
+        remaining_duration = (
+            slideshow_start + slideshow_duration) - current_time
         clip_duration = min(effective_photo_duration, remaining_duration)
 
         photo_schedule.append(
@@ -312,13 +364,15 @@ def render_video_with_libopenshot(
             if slideshow_duration > 0
             else 100
         )
-        print(f"  Progress: {progress:.1f}% - Scheduled {os.path.basename(photo)}")
+        print(
+            f"  Progress: {progress:.1f}% - Scheduled {os.path.basename(photo)}")
 
     print(f"\nBuilding OpenShot Timeline...")
 
     # Create timeline with variable resolution
     timeline = openshot.Timeline(
-        width, height, openshot.Fraction(fps, 1), 44100, 2, openshot.LAYOUT_STEREO
+        width, height, openshot.Fraction(
+            fps, 1), 44100, 2, openshot.LAYOUT_STEREO
     )
 
     # Parse background color (hex to RGB)
@@ -357,13 +411,14 @@ def render_video_with_libopenshot(
             photo_clip.alpha = openshot.Keyframe()
             photo_clip.alpha.AddPoint(1, 0.0)  # Start transparent
             photo_clip.alpha.AddPoint(
-                int(effective_fade_duration * 30), 1.0
+                int(effective_fade_duration * fps), 1.0
             )  # Fade to opaque
 
         if idx < len(photo_schedule) - 1:
             # Fade out to next
-            end_frame = int(item["duration"] * 30)
-            start_fade_frame = int((item["duration"] - effective_fade_duration) * 30)
+            end_frame = int(item["duration"] * fps)
+            start_fade_frame = int(
+                (item["duration"] - effective_fade_duration) * fps)
             if not hasattr(photo_clip, "alpha") or photo_clip.alpha is None:
                 photo_clip.alpha = openshot.Keyframe()
             photo_clip.alpha.AddPoint(start_fade_frame, 1.0)  # Start opaque
@@ -372,7 +427,8 @@ def render_video_with_libopenshot(
         timeline.AddClip(photo_clip)
 
         progress = ((idx + 1) / len(photo_schedule)) * 100
-        print(f"    Progress: {progress:.1f}% - Added {os.path.basename(item['file'])}")
+        print(
+            f"    Progress: {progress:.1f}% - Added {os.path.basename(item['file'])}")
 
     # Open timeline
     print("\nOpening timeline...")
@@ -393,7 +449,8 @@ def render_video_with_libopenshot(
         False,
         bitrate,
     )
-    writer.SetAudioOptions(True, "aac", 44100, 2, openshot.LAYOUT_STEREO, 192000)
+    writer.SetAudioOptions(True, "aac", 44100, 2,
+                           openshot.LAYOUT_STEREO, 192000)
 
     # Open writer
     writer.Open()
@@ -524,7 +581,8 @@ def run_ffmpeg_with_progress(
             # Report every 100 frames
             if current_frame - last_frame_reported >= 100:
                 if total_frames > 0:
-                    percentage = min(100, int((current_frame / total_frames) * 100))
+                    percentage = min(
+                        100, int((current_frame / total_frames) * 100))
                     print(
                         f"  {description}: {percentage}% (frame {current_frame}/{total_frames})",
                         flush=True,
@@ -535,7 +593,8 @@ def run_ffmpeg_with_progress(
         elif time_match and total_duration > 0 and last_frame_reported == 0:
             # Fallback to time-based progress if frame info not available
             hours, minutes, seconds = time_match.groups()
-            current_time = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+            current_time = int(hours) * 3600 + \
+                int(minutes) * 60 + float(seconds)
             percentage = min(100, int((current_time / total_duration) * 100))
             if percentage % 10 == 0:
                 print(f"  {description}: {percentage}%", flush=True)
@@ -543,7 +602,8 @@ def run_ffmpeg_with_progress(
     process.wait()
 
     if process.returncode != 0:
-        raise RuntimeError(f"FFmpeg failed with exit code {process.returncode}")
+        raise RuntimeError(
+            f"FFmpeg failed with exit code {process.returncode}")
 
     if total_frames > 0:
         print(
@@ -594,7 +654,9 @@ def render_video(
             f"Trim values (start={trim_start}s, end={trim_end}s) exceed audio duration ({audio_duration:.1f}s)"
         )
     if trim_start > 0 or trim_end > 0:
-        print(f"Audio trimmed: {trim_start}s from start, {trim_end}s from end → {effective_audio_duration:.1f}s")
+        print(
+            f"Audio trimmed: {trim_start}s from start, {trim_end}s from end → {effective_audio_duration:.1f}s"
+        )
 
     slideshow_start = intro_duration
     slideshow_duration = effective_audio_duration - intro_duration - outro_duration
@@ -644,7 +706,8 @@ def render_video(
         if no_repeat and photo_index >= len(photos):
             break
         photo = photos[photo_index % len(photos)]
-        remaining_duration = (slideshow_start + slideshow_duration) - current_time
+        remaining_duration = (
+            slideshow_start + slideshow_duration) - current_time
         clip_duration = min(effective_photo_duration, remaining_duration)
 
         photo_schedule.append(
@@ -663,7 +726,8 @@ def render_video(
             if slideshow_duration > 0
             else 100
         )
-        print(f"  Progress: {progress:.1f}% - Scheduled {os.path.basename(photo)}")
+        print(
+            f"  Progress: {progress:.1f}% - Scheduled {os.path.basename(photo)}")
 
     # Create temporary directory for intermediate files
     import tempfile
@@ -722,7 +786,8 @@ def render_video(
             cmd = ["ffmpeg", "-y"]
             for item in photo_schedule:
                 cmd.extend(
-                    ["-loop", "1", "-t", str(item["duration"]), "-i", item["file"]]
+                    ["-loop", "1", "-t",
+                        str(item["duration"]), "-i", item["file"]]
                 )
 
             # Build complex filter with scale, pad, and xfade
@@ -799,7 +864,8 @@ def render_video(
             text=True,
         )
         actual_duration = (
-            float(probe_result.stdout.strip()) if probe_result.returncode == 0 else 0
+            float(probe_result.stdout.strip()
+                  ) if probe_result.returncode == 0 else 0
         )
         print(f"  Actual photo video duration: {actual_duration:.1f}s")
 
@@ -883,7 +949,8 @@ def render_video(
             text=True,
         )
         video_duration = (
-            float(probe_result.stdout.strip()) if probe_result.returncode == 0 else 0
+            float(probe_result.stdout.strip()
+                  ) if probe_result.returncode == 0 else 0
         )
         print(f"  Intermediate video duration: {video_duration:.1f}s")
 
@@ -969,6 +1036,7 @@ def create_openshot_project(
     trim_start: float = DEFAULT_TRIM_START,
     trim_end: float = DEFAULT_TRIM_END,
     no_repeat: bool = False,
+    fps: float = 30.0,
 ) -> None:
     """Create an OpenShot project file (.osp) as JSON."""
 
@@ -1070,7 +1138,8 @@ def create_openshot_project(
             break
         photo = photos[photo_index % len(photos)]
 
-        remaining_duration = (slideshow_start + slideshow_duration) - current_time
+        remaining_duration = (
+            slideshow_start + slideshow_duration) - current_time
         clip_duration = min(effective_photo_duration, remaining_duration)
 
         # Photos will be added to JSON structure during save
@@ -1123,7 +1192,7 @@ def create_openshot_project(
             },
         ],
         # Add explicit timing/ratio metadata expected by newer OpenShot builds
-        "fps": {"num": 30, "den": 1},
+        "fps": {"num": fps, "den": 1},
         "display_ratio": {"num": 16, "den": 9},
         "pixel_ratio": {"num": 1, "den": 1},
         "sample_rate": 44100,
@@ -1176,6 +1245,7 @@ def create_openshot_project(
         scale_mode: str,
         has_audio: bool,
         has_video: bool,
+        fps: float,
         alpha_points: Optional[List[Tuple[float, float]]] = None,
     ) -> Optional[Dict[str, Any]]:
         if openshot is None:
@@ -1232,7 +1302,7 @@ def create_openshot_project(
             "sample_rate": 44100,
             "channels": 2,
             "channel_layout": 3,
-            "fps": {"num": 30, "den": 1},
+            "fps": {"num": fps, "den": 1},
             "display_ratio": {"num": 16, "den": 9},
             "pixel_ratio": {"num": 1, "den": 1},
         },
@@ -1268,6 +1338,7 @@ def create_openshot_project(
         has_audio=True,
         has_video=False,
         alpha_points=None,
+        fps=fps,
     )
     if audio_clip_json:
         audio_clip_json.update(
@@ -1287,7 +1358,8 @@ def create_openshot_project(
 
     while current_time < slideshow_start + slideshow_duration:
         photo = photos[photo_index % len(photos)]
-        remaining_duration = (slideshow_start + slideshow_duration) - current_time
+        remaining_duration = (
+            slideshow_start + slideshow_duration) - current_time
         clip_duration = min(effective_photo_duration, remaining_duration)
 
         photo_clips.append(
@@ -1318,7 +1390,7 @@ def create_openshot_project(
                 "has_video": True,
                 "width": 1920,
                 "height": 1080,
-                "fps": {"num": 30, "den": 1},
+                "fps": {"num": fps, "den": 1},
                 "display_ratio": {"num": 16, "den": 9},
                 "pixel_ratio": {"num": 1, "den": 1},
             },
@@ -1364,6 +1436,7 @@ def create_openshot_project(
             has_audio=False,
             has_video=True,
             alpha_points=alpha_points,
+            fps=fps
         )
         if photo_clip_json:
             photo_clip_json.update(
@@ -1377,29 +1450,11 @@ def create_openshot_project(
         project_data["clips"].append(photo_clip_data)
         clip_objects.append(photo_clip_data)
 
-    # Add fade transitions between consecutive photos
-    for idx in range(len(clip_objects) - 1):
-        current_clip = clip_objects[idx]
-        next_clip = clip_objects[idx + 1]
-
-        # Transition occurs during the overlap period
-        # Position: where next clip starts (which is overlap region start)
-        transition_position = photo_clips[idx + 1]["position"]
-
-        transition_data = {
-            "id": str(uuid.uuid4()),
-            "layer": photo_layer,
-            "position": transition_position,
-            "start": 0.0,
-            "end": effective_fade_duration,
-            "duration": effective_fade_duration,
-            "type": "Mask",
-            "brightness": {"Points": [{"co": {"X": 1, "Y": 1}, "interpolation": 0}]},
-            "contrast": {"Points": [{"co": {"X": 1, "Y": 3}, "interpolation": 0}]},
-            "reader": {"type": "QtImageReader", "path": "@transitions/common/fade.svg"},
-            "replace_image": False,
-        }
-        project_data["effects"].append(transition_data)
+    # Add fade transitions between consecutive photos (use helper for clarity)
+    transitions = generate_crossfade_effects(
+        clip_objects, fps, fade_duration=effective_fade_duration, layer=photo_layer
+    )
+    project_data["effects"].extend(transitions)
 
     # Mirror timeline data for OpenShot 3.x compatibility
     project_data["timeline"] = {
@@ -1469,7 +1524,8 @@ Examples:
     )
 
     parser.add_argument("audio_file", help="Path to audio file (WAV, MP3)")
-    parser.add_argument("photos_folder", help="Path to folder containing photos")
+    parser.add_argument(
+        "photos_folder", help="Path to folder containing photos")
     parser.add_argument(
         "output_project",
         help="Path for output file (.osp for project, .mp4/.mkv for video)",
@@ -1580,11 +1636,13 @@ Examples:
 
     # Validate inputs
     if not os.path.exists(args.audio_file):
-        print(f"Error: Audio file not found: {args.audio_file}", file=sys.stderr)
+        print(
+            f"Error: Audio file not found: {args.audio_file}", file=sys.stderr)
         sys.exit(1)
 
     if not os.path.isdir(args.photos_folder):
-        print(f"Error: Photos folder not found: {args.photos_folder}", file=sys.stderr)
+        print(
+            f"Error: Photos folder not found: {args.photos_folder}", file=sys.stderr)
         sys.exit(1)
 
     try:

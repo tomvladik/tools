@@ -12,15 +12,40 @@ Generate OpenShot video projects from audio files and photo sequences.
 
 ## Requirements
 
-This script requires **libopenshot** to be installed. Since libopenshot is not available on PyPI for Windows, use one of these approaches:
+**Essential:**
+- `ffmpeg` and `ffprobe` (required for all rendering)
 
-### Option 1: VS Code Dev Container (Recommended)
+**Optional:**
+- `python3-openshot` (to create `.osp` project files or use libopenshot Timeline rendering)
+- `Pillow` (for `make_test_data.py` to create numbered test images)
+
+### Setup Options
+
+#### Option 1: VS Code Dev Container (Recommended)
 
 1. Install the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension
 2. Open this workspace in VS Code
 3. Press `Ctrl+Shift+P` and select **"Dev Containers: Reopen in Container"**
 4. Wait for the container to build (includes libopenshot, FFmpeg, etc.)
 5. Run the script inside the container
+
+#### Option 2: Linux/WSL
+
+```bash
+sudo apt-get install ffmpeg python3-openshot python3-pip
+pip install Pillow
+```
+
+#### Option 3: macOS
+
+```bash
+brew install ffmpeg libopenshot
+pip install Pillow
+```
+
+#### Option 4: Render video without `.osp` project files
+
+You can render MP4 videos directly using `--export-video` without installing libopenshot — FFmpeg alone is sufficient.
 
 
 ## Usage
@@ -31,24 +56,55 @@ python generate_openshot_project.py <audio_file> <photos_folder> <output_project
 
 ### Examples
 
+#### Create OpenShot Project File (.osp) - Full Feature Support
+
+**Supported options:** `--photo-duration`, `--fade-duration`, `--bg-color`, `--youtube`/`--no-youtube`, `--title`, `--copyright`, `--intro-duration`, `--outro-duration`, `--trim-start`, `--trim-end`, `--no-repeat`
+
 ```bash
-# Basic usage
+# Basic usage (requires python3-openshot)
 python generate_openshot_project.py lecture.mp3 ./photos/ lecture_video.osp
 
-# Custom photo duration (3 minutes per photo)
-python generate_openshot_project.py --photo-duration 180 song.wav ./images/ project.osp
+# Custom photo duration (3 minutes per photo) with title/copyright
+python generate_openshot_project.py --photo-duration 180 --title "My Video" --copyright "© 2026 Me" song.wav ./images/ project.osp
 
 # Custom crossfade duration (1 second)
 python generate_openshot_project.py --fade-duration 1 audio.mp3 ./photos/ output.osp
 
-# Custom background color (red)
-python generate_openshot_project.py --bg-color "#ff0000" audio.mp3 ./photos/ output.osp
+# Custom background color (red) and longer intro, trim audio start/end
+python generate_openshot_project.py --bg-color "#ff0000" --intro-duration 300 --trim-start 5 --trim-end 2 audio.mp3 ./photos/ output.osp
+```
 
-# Print environment tool versions (ffmpeg, git, docker, etc.)
-python generate_openshot_project.py --version
+#### Render Video Directly (MP4) - Limited Feature Set
 
-# Print script version
-python generate_openshot_project.py --script-version
+**Supported options:** `--photo-duration`, `--fade-duration`, `--bg-color`, `--youtube`/`--no-youtube`, `--intro-duration`, `--outro-duration`, `--no-repeat`, `--test-run`, `--use-libopenshot`, `--save-osp`, `--trim-start`, `--trim-end`
+
+**NOT supported with `--export-video`:** `--title`, `--copyright`
+
+```bash
+# Direct FFmpeg rendering (no .osp file, only needs ffmpeg)
+python generate_openshot_project.py --export-video lecture.mp3 ./photos/ output.mp4
+
+# Test mode: fast draft rendering at 320x200@10fps
+python generate_openshot_project.py --export-video --test-run song.wav ./images/ output.mp4
+
+# Trim audio from start/end and render
+python generate_openshot_project.py --export-video --trim-start 5 --trim-end 2 audio.mp3 ./photos/ output.mp4
+
+# Also create .osp project file alongside the video (useful for later editing)
+python generate_openshot_project.py --export-video --save-osp audio.mp3 ./photos/ output.mp4
+
+# Use libopenshot Timeline (slower but like editing in OpenShot)
+python generate_openshot_project.py --export-video --use-libopenshot audio.mp3 ./photos/ output.mp4
+
+# Don't repeat photos; extend each one to fill the slideshow duration
+python generate_openshot_project.py --export-video --no-repeat song.wav ./images/ output.mp4
+```
+
+#### Utilities
+
+```bash
+# Check installed tool versions
+python generate_openshot_project.py --versions
 ```
 ### Command-line Options
 
@@ -81,10 +137,37 @@ optional arguments:
 
 ## Workflow
 
-1. **Generate project**: Run the script to create an `.osp` file
+### Option A: Create `.osp` Project File (Edit in OpenShot) — Full Features
+
+**Best for:** Interactive editing, text overlays (title/copyright), precise audio trimming
+
+1. **Generate project**: `python generate_openshot_project.py audio.mp3 ./photos/ output.osp`
 2. **Open in OpenShot**: Launch OpenShot and open the generated `.osp` file
-3. **Preview**: Play the timeline to review transitions
+3. **Preview**: Play the timeline to review transitions and make edits
 4. **Export**: Use OpenShot's export feature to render the final video
+
+**Features available:**
+- ✅ Photo duration, crossfade duration, background color
+- ✅ Intro/outro screens with duration control
+- ✅ Title and copyright text overlays
+- ✅ Audio trimming (start/end)
+- ✅ Full OpenShot editing capabilities after export
+
+### Option B: Render Video Directly (MP4) — Fast, Limited Features
+
+**Best for:** Quick rendering, automated pipelines, Windows (no libopenshot needed)
+
+1. **Generate video**: `python generate_openshot_project.py --export-video audio.mp3 ./photos/ output.mp4`
+2. **Done**: Final video is ready to use
+
+**Features available:**
+- ✅ Photo duration, crossfade duration, background color
+- ✅ Intro/outro screens with duration control
+- ✅ Audio trimming (start/end)
+- ❌ Title/copyright text overlays (not supported)
+- ⚠️ Limited editing: can use `--save-osp` to create `.osp` for further editing
+
+**Note:** Direct rendering is faster and doesn't require libopenshot.
 
 ## File Structure
 
@@ -119,7 +202,9 @@ Photos are processed in alphabetical order.
 
 ### "ModuleNotFoundError: No module named 'openshot'"
 
-Use the Dev Container approach (Option 1 above) - it has all dependencies pre-installed.
+**If creating `.osp` project files:** Use the Dev Container approach or install `python3-openshot` on Linux/macOS.
+
+**If rendering video directly:** Use `--export-video` instead — FFmpeg alone is sufficient and works on Windows without libopenshot.
 
 ### "Error: FFmpeg/FFprobe not found"
 
