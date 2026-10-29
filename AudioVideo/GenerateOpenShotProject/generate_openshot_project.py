@@ -213,6 +213,8 @@ def render_video_with_libopenshot(
     outro_duration: int = 60,
     test_run: bool = False,
     no_repeat: bool = False,
+    trim_start: float = DEFAULT_TRIM_START,
+    trim_end: float = DEFAULT_TRIM_END,
 ) -> None:
     """Render video using libopenshot Timeline and FFmpegWriter (like a video editor)."""
 
@@ -235,12 +237,21 @@ def render_video_with_libopenshot(
         f"Audio duration: {audio_duration:.1f} seconds ({audio_duration/60:.1f} minutes)"
     )
 
+    # Apply trimming
+    effective_audio_duration = audio_duration - trim_start - trim_end
+    if effective_audio_duration <= 0:
+        raise ValueError(
+            f"Trim values (start={trim_start}s, end={trim_end}s) exceed audio duration ({audio_duration:.1f}s)"
+        )
+    if trim_start > 0 or trim_end > 0:
+        print(f"Audio trimmed: {trim_start}s from start, {trim_end}s from end → {effective_audio_duration:.1f}s")
+
     slideshow_start = intro_duration
-    slideshow_duration = audio_duration - intro_duration - outro_duration
+    slideshow_duration = effective_audio_duration - intro_duration - outro_duration
 
     if slideshow_duration < 0:
         raise ValueError(
-            f"Intro ({intro_duration}s) + Outro ({outro_duration}s) exceeds audio duration ({audio_duration}s)"
+            f"Intro ({intro_duration}s) + Outro ({outro_duration}s) exceeds audio duration ({effective_audio_duration}s)"
         )
 
     print("Scanning photos folder...")
@@ -554,6 +565,8 @@ def render_video(
     fade_duration: float = 2.5,
     test_run: bool = False,
     no_repeat: bool = False,
+    trim_start: float = DEFAULT_TRIM_START,
+    trim_end: float = DEFAULT_TRIM_END,
 ) -> None:
     """Render video directly using FFmpeg (bypasses buggy libopenshot Timeline API)."""
 
@@ -574,12 +587,21 @@ def render_video(
         f"Audio duration: {audio_duration:.1f} seconds ({audio_duration/60:.1f} minutes)"
     )
 
+    # Apply trimming
+    effective_audio_duration = audio_duration - trim_start - trim_end
+    if effective_audio_duration <= 0:
+        raise ValueError(
+            f"Trim values (start={trim_start}s, end={trim_end}s) exceed audio duration ({audio_duration:.1f}s)"
+        )
+    if trim_start > 0 or trim_end > 0:
+        print(f"Audio trimmed: {trim_start}s from start, {trim_end}s from end → {effective_audio_duration:.1f}s")
+
     slideshow_start = intro_duration
-    slideshow_duration = audio_duration - intro_duration - outro_duration
+    slideshow_duration = effective_audio_duration - intro_duration - outro_duration
 
     if slideshow_duration < 0:
         raise ValueError(
-            f"Intro ({intro_duration}s) + Outro ({outro_duration}s) exceeds audio duration ({audio_duration}s)"
+            f"Intro ({intro_duration}s) + Outro ({outro_duration}s) exceeds audio duration ({effective_audio_duration}s)"
         )
 
     print("Scanning photos folder...")
@@ -1604,6 +1626,8 @@ Examples:
                     args.outro_duration,
                     args.test_run,
                     args.no_repeat,
+                    args.trim_start,
+                    args.trim_end,
                 )
             else:
                 # Use direct FFmpeg rendering (more stable)
@@ -1619,6 +1643,8 @@ Examples:
                     args.fade_duration,
                     args.test_run,
                     args.no_repeat,
+                    args.trim_start,
+                    args.trim_end,
                 )
         else:
             # Create .osp project file

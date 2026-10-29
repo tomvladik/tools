@@ -22,20 +22,6 @@ This script requires **libopenshot** to be installed. Since libopenshot is not a
 4. Wait for the container to build (includes libopenshot, FFmpeg, etc.)
 5. Run the script inside the container
 
-### Option 2: WSL2 or Linux
-
-```bash
-sudo apt-get update
-sudo apt-get install libopenshot python3-openshot ffmpeg
-python3 generate_openshot_project.py <audio> <photos_folder> <output.osp>
-```
-
-### Option 3: macOS
-
-```bash
-brew install libopenshot
-python3 generate_openshot_project.py <audio> <photos_folder> <output.osp>
-```
 
 ## Usage
 
@@ -70,18 +56,27 @@ python generate_openshot_project.py --script-version
 positional arguments:
   audio_file            Path to audio file (WAV, MP3)
   photos_folder         Path to folder containing photos
-  output_project        Path for output OpenShot project file
+  output_project        Path for output file (.osp for project, .mp4/.mkv for video)
 
 optional arguments:
-  -h, --help            Show this help message
+  -h, --help            Show this help message and exit
+  --versions            Print current versions of key utilities and exit
+  --export-video        Render video directly instead of creating .osp project file
+  --save-osp            Also save .osp project file when using --export-video
+  --use-libopenshot     Use libopenshot Timeline for rendering (may be unstable; requires --export-video)
+  --test-run            Fast draft mode: render at 320x200@10fps for quick testing (requires --export-video)
+  --no-repeat           Do not repeat images; equally prolong each photo to cover audio length
   --photo-duration      Duration of each photo in seconds (default: 120 = 2 minutes)
-  --fade-duration       Crossfade duration in seconds (default: 2)
-  --bg-color            Background color in hex (default: #000000 = black)
+  --fade-duration       Crossfade transition duration in seconds (default: 2.5)
+  --bg-color            Background color in hex format (default: #c7958b). Examples: #ffffff (white), #ff0000 (red)
+  --youtube             Use YouTube-optimized export settings (default; 1080p 30fps H.264/AAC)
+  --no-youtube          Disable YouTube optimization
   --title               Title text for intro screen (default: Demo)
-  --copyright           Copyright text (default: © 2024)
+  --copyright           Copyright text for screens (default: © 2024)
   --intro-duration      Intro screen duration in seconds (default: 180 = 3 minutes)
   --outro-duration      Outro screen duration in seconds (default: 60 = 1 minute)
-  --no-youtube          Disable YouTube optimization
+  --trim-start          Trim audio from the beginning in seconds (default: 0.0)
+  --trim-end            Trim audio from the end in seconds (default: 0.0)
 ```
 
 ## Workflow
@@ -132,21 +127,6 @@ Install FFmpeg:
 - Linux: `sudo apt-get install ffmpeg`
 - macOS: `brew install ffmpeg`
 - Windows: Download from https://ffmpeg.org/download.html
-
-### Using PowerShell activation scripts
-
-On Windows, don't pass generator flags to the virtual-environment activation script (for example, `& .\.venv\Scripts\Activate.ps1 --version`), because the activation script doesn't accept those options and PowerShell may misinterpret them.
-
-Correct usage:
-
-```powershell
-# Activate the venv first
-& .\.venv\Scripts\Activate.ps1
-# Then run the generator (or call Python directly)
-python .\generate_openshot_project.py --version
-```
-
-You can also run the script without activating the venv by invoking your full Python executable.
 
 ### Project file won't open in OpenShot
 
