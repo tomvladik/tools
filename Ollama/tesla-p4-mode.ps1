@@ -101,38 +101,49 @@ function Ask-Restart {
 }
 
 $key = Get-CardKey
+function Set-Mode {
+    param (
+        [string]$Mode,
+        [int]$WDDMMode = 0,
+        [int]$TCCMode = 1
+    )
+
+    Backup-Key $key 'ORIG'
+
+    if ($Mode -eq 'Gaming') {
+        Set-ItemProperty -Path $key.PSPath -Name 'AdapterType' -Value 1 -Type DWord
+        Set-ItemProperty -Path $key.PSPath -Name 'FeatureScore' -Value 0xd1 -Type DWord
+        Set-ItemProperty -Path $key.PSPath -Name 'EnableMsHybrid' -Value 1 -Type DWord
+        Set-ItemProperty -Path $key.PSPath -Name 'GridLicensedFeatures' -Value 7 -Type DWord
+        Write-Host "Set $Mode mode (hybrid graphics + WDDM)."
+    } else {
+        foreach ($name in 'AdapterType', 'EnableMsHybrid') {
+            if ($null -ne (Get-ItemProperty -Path $key.PSPath -Name $name -ErrorAction SilentlyContinue).$name) {
+                Remove-ItemProperty -Path $key.PSPath -Name $name
+            }
+        }
+        Write-Host "Set $Mode mode (TCC). Games will not work in this mode."
+    }
+
+    if (Test-Path $NvidiaSmi) {
+        $dmValue = if ($Mode -eq 'Gaming') { $WDDMMode } else { $TCCMode }
+        & $NvidiaSmi -g 0 -dm $dmValue
+    }
+
+    Show-Status $key
+    Backup-Key $key 'NEW'
+    Ask-Restart
+}
 
 switch ($Mode) {
     'Status' {
         Show-Status $key
     }
 
-    'Gaming' {
-        Backup-Key $key 'ORIG'
-        Set-ItemProperty -Path $key.PSPath -Name 'AdapterType'    -Value 1 -Type DWord
-        Set-ItemProperty -Path $key.PSPath -Name 'EnableMsHybrid' -Value 1 -Type DWord
-        if (Test-Path $NvidiaSmi) {
-            & $NvidiaSmi -g 0 -dm 0   # 0 = WDDM
-        }
-        Write-Host 'Set gaming mode (hybrid graphics + WDDM).'
-        Show-Status $key
-        Backup-Key $key 'NEW'
-        Ask-Restart
-    }
-
-    'Compute' {
-        Backup-Key $key 'ORIG'
-        foreach ($name in 'AdapterType', 'EnableMsHybrid') {
-            if ($null -ne (Get-ItemProperty -Path $key.PSPath -Name $name -ErrorAction SilentlyContinue).$name) {
-                Remove-ItemProperty -Path $key.PSPath -Name $name
-            }
-        }
-        if (Test-Path $NvidiaSmi) {
-            & $NvidiaSmi -g 0 -dm 1   # 1 = TCC
-        }
-        Write-Host 'Set compute mode (TCC). Games will not work in this mode.'
-        Show-Status $key
-        Backup-Key $key 'NEW'
-        Ask-Restart
-    }
+'Gaming' {
+    Set-Mode -Mode 'Gaming'
 }
+
+'Compute' {
+    Set-Mode -Mode 'Compute'
+}}
