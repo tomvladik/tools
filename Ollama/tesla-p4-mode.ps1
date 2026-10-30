@@ -19,88 +19,95 @@ param(
     [string]$Mode,
 
     [string]$CardName = 'Tesla P4',
-    [string]$NvidiaSmi = 'C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe',
-    [string]$BackupDir = "$env:USERPROFILE\Documents\p4-registry-backup"
+    [string]$NvidiaSmiPath = 'C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe',
+    [string]$BackupDirectory = "$env:USERPROFILE\Documents\p4-registry-backup"
 )
 
 $ErrorActionPreference = 'Stop'
-$ClassPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}'
+$RegistryClassPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}'
 
-function file_glob_search {
+function Get-GlobFiles {
     param (
-        [string]$pattern,
-        [string]$path = (Get-Location).Path
+        [string]$Pattern,
+        [string]$SearchPath = (Get-Location).Path
     )
 
-    $pattern = $pattern -replace '\*', '.*'
+    $pattern = $Pattern -replace '\*', '.*'
     $pattern = $pattern -replace '\?', '.'
 
-    $results = Get-ChildItem -Recurse -File -Filter $pattern -Path $path | Select-Object -ExpandProperty FullName
-
-    return $results
+    return (Get-ChildItem -Recurse -File -Filter $Pattern -Path $SearchPath | Select-Object -ExpandProperty FullName)
 }
 
-$NvidiaSmi = ''
-$possibleNvidiaSmiLocations = 'C:\Program Files\NVIDIA Corporation', 'C:\Program Files (x86)\NVIDIA Corporation' | ForEach-Object -Process {
-    file_glob_search -pattern 'nvidia-smi.exe' -path $_
+$NvidiaSmiPath = ''
+$PossibleNvidiaSmiLocations = 'C:\Program Files\NVIDIA Corporation', 'C:\Program Files (x86)\NVIDIA Corporation' | ForEach-Object -Process {
+    Get-GlobFiles -Pattern 'nvidia-smi.exe' -SearchPath $_
 }
-if ($possibleNvidiaSmiLocations.Length -eq 0) {
-    $NvidiaSmi = 'C:\WINDOWS\system32\nvidia-smi.exe'
-} else {
-    echo "Found nvidia-smi.exe at: $($possibleNvidiaSmiLocations[0])"   
-    $NvidiaSmi = $possibleNvidiaSmiLocations[0]
+if ($PossibleNvidiaSmiLocations.Length -eq 0) {
+    $NvidiaSmiPath = 'C:\WINDOWS\system32\nvidia-smi.exe'
+}
+else {
+    Write-Host "Found nvidia-smi.exe at: $($PossibleNvidiaSmiLocations[0])"   
+    $NvidiaSmiPath = $PossibleNvidiaSmiLocations[0]
 }
 
 
 
-function Get-CardKey {
+function Get-GPURegistryKey {
     # Find subkey (0000, 0001, ...), whose DriverDesc contains card name.
-    $found = Get-ChildItem -Path $ClassPath -ErrorAction SilentlyContinue |
-        Where-Object { $_.PSChildName -match '^\d{4}$' } |
-        Where-Object {
-            $desc = (Get-ItemProperty -Path $_.PSPath -Name DriverDesc -ErrorAction SilentlyContinue).DriverDesc
-            $desc -and $desc -like "*$CardName*"
-        }
-    if (-not $found) { throw "Card '$CardName' not found in registry." }
-    if (@($found).Count -gt 1) { throw "Multiple matches found for '$CardName'. Please adjust parameter -CardName." }
-    return $found
+    $FoundKeys = Get-ChildItem -Path $RegistryClassPath -ErrorAction SilentlyContinue |
+    Where-Object { $_.PSChildName -match '^\d{4}$' } |
+    Where-Object {
+        $desc = (Get-ItemProperty -Path $_.PSPath -Name DriverDesc -ErrorAction SilentlyContinue).DriverDesc
+        $desc -and $desc -like "*$CardName*"
+    }
+    
+    # Validate findings and throw descriptive errors
+    if (-not $FoundKeys) { 
+        throw "Card '$CardName' not found in registry. Please ensure NVIDIA drivers are installed." 
+    }
+    
+    if (@($FoundKeys).Count -gt 1) { 
+        throw "Multiple matches found for '$CardName'. Please specify the exact card model." 
+    }
+    
+    return $FoundKeys[0]
 }
 
 function Get-DriverModel {
-    if (Test-Path $NvidiaSmi) {
-        $out = & $NvidiaSmi --query-gpu=name,driver_model.current --format=csv,noheader 2>&1
+    if (Test-Path $NvidiaSmiPath) {
+        $out = & $NvidiaSmiPath --query-gpu=name,driver_model.current --format=csv,noheader 2>&1
         return ($out | Out-String).Trim()
     }
     return 'nvidia-smi not found'
 }
 
-function Show-Status($key) {
-    $props = Get-ItemProperty -Path $key.PSPath
+function Show-GPUStatus($RegistryKey) {
+    $Props = Get-ItemProperty -Path $RegistryKey.PSPath
     Write-Host ''
-    Write-Host "Registry key : $($key.Name)"
-    Write-Host "DriverDesc    : $($props.DriverDesc)"
-    Write-Host "AdapterType   : $(if ($null -ne $props.AdapterType) { $props.AdapterType } else { '(not set)' })"
-    Write-Host "EnableMsHybrid: $(if ($null -ne $props.EnableMsHybrid) { $props.EnableMsHybrid } else { '(not set)' })"
-    Write-Host "Driver mode: $(Get-DriverModel)"
+    Write-Host "Registry key   : $($RegistryKey.Name)"
+    Write-Host "DriverDesc     : $($Props.DriverDesc)"
+    Write-Host "AdapterType    : $(if ($null -ne $Props.AdapterType) { $Props.AdapterType } else { '(not set)' })"
+    Write-Host "EnableMsHybrid : $(if ($null -ne $Props.EnableMsHybrid) { $Props.EnableMsHybrid } else { '(not set)' })"
+    Write-Host "Driver mode:   $(Get-DriverModel)"
     Write-Host ''
 }
 
-function Backup-Key($key, $suffix) {
-    New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null
-    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $file = Join-Path $BackupDir "p4-$($key.PSChildName)-$suffix-$stamp.reg"
-    $regPath = $key.Name  # HKEY_LOCAL_MACHINE\...
-    & reg.exe export $regPath $file /y | Out-Null
+function Backup-RegistryKey($RegistryKey, $Suffix) {
+    New-Item -ItemType Directory -Path $BackupDirectory -Force | Out-Null
+    $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $FilePath = Join-Path $BackupDirectory "p4-$($RegistryKey.PSChildName)-$Suffix-$Stamp.reg"
+    $RegPath = $RegistryKey.Name  # HKEY_LOCAL_MACHINE\...
+    & reg.exe export $RegPath $FilePath /y | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Backup failed, change not applied.' }
-    Write-Host "Backup saved: $file"
+    Write-Host "Backup saved: $FilePath"
 }
 
 function Request-Restart {
-    $answer = Read-Host 'Change will take effect after restart. Restart now? (y/N)'
-    if ($answer -match '^[yY]') { Restart-Computer -Force }
+    $Answer = Read-Host 'Change will take effect after restart. Restart now? (y/N)'
+    if ($Answer -match '^[yY]') { Restart-Computer -Force }
 }
 
-$key = Get-CardKey
+$GPURegistryKey = Get-GPURegistryKey
 function Set-Mode {
     param (
         [string]$Mode,
@@ -108,42 +115,44 @@ function Set-Mode {
         [int]$TCCMode = 1
     )
 
-    Backup-Key $key 'ORIG'
+    Backup-RegistryKey $GPURegistryKey 'ORIG'
 
     if ($Mode -eq 'Gaming') {
-        Set-ItemProperty -Path $key.PSPath -Name 'AdapterType' -Value 1 -Type DWord
-        Set-ItemProperty -Path $key.PSPath -Name 'FeatureScore' -Value 0xd1 -Type DWord
-        Set-ItemProperty -Path $key.PSPath -Name 'EnableMsHybrid' -Value 1 -Type DWord
-        Set-ItemProperty -Path $key.PSPath -Name 'GridLicensedFeatures' -Value 7 -Type DWord
+        Set-ItemProperty -Path $GPURegistryKey.PSPath -Name 'AdapterType' -Value 1 -Type DWord
+        Set-ItemProperty -Path $GPURegistryKey.PSPath -Name 'FeatureScore' -Value 0xd1 -Type DWord
+        Set-ItemProperty -Path $GPURegistryKey.PSPath -Name 'EnableMsHybrid' -Value 1 -Type DWord
+        Set-ItemProperty -Path $GPURegistryKey.PSPath -Name 'GridLicensedFeatures' -Value 7 -Type DWord
         Write-Host "Set $Mode mode (hybrid graphics + WDDM)."
-    } else {
-        foreach ($name in 'AdapterType', 'EnableMsHybrid') {
-            if ($null -ne (Get-ItemProperty -Path $key.PSPath -Name $name -ErrorAction SilentlyContinue).$name) {
-                Remove-ItemProperty -Path $key.PSPath -Name $name
+    }
+    else {
+        foreach ($PropertyToUnset in 'AdapterType', 'EnableMsHybrid') {
+            if ($null -ne (Get-ItemProperty -Path $GPURegistryKey.PSPath -Name $PropertyToUnset -ErrorAction SilentlyContinue).$PropertyToUnset) {
+                Remove-ItemProperty -Path $GPURegistryKey.PSPath -Name $PropertyToUnset
             }
         }
         Write-Host "Set $Mode mode (TCC). Games will not work in this mode."
     }
 
-    if (Test-Path $NvidiaSmi) {
-        $dmValue = if ($Mode -eq 'Gaming') { $WDDMMode } else { $TCCMode }
-        & $NvidiaSmi -g 0 -dm $dmValue
+    if (Test-Path $NvidiaSmiPath) {
+        $DriverModelValue = if ($Mode -eq 'Gaming') { $WDDMMode } else { $TCCMode }
+        & $NvidiaSmiPath -g 0 -dm $DriverModelValue
     }
 
-    Show-Status $key
-    Backup-Key $key 'NEW'
+    Show-GPUStatus $GPURegistryKey
+    Backup-RegistryKey $GPURegistryKey 'NEW'
     Request-Restart
 }
 
 switch ($Mode) {
     'Status' {
-        Show-Status $key
+        Show-GPUStatus $GPURegistryKey
     }
 
-'Gaming' {
-    Set-Mode -Mode 'Gaming'
-}
+    'Gaming' {
+        Set-Mode -Mode 'Gaming'
+    }
 
-'Compute' {
-    Set-Mode -Mode 'Compute'
-}}
+    'Compute' {
+        Set-Mode -Mode 'Compute'
+    }
+}
