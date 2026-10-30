@@ -32,6 +32,10 @@ function Get-GlobFiles {
         [string]$SearchPath = (Get-Location).Path
     )
 
+    if ([string]::IsNullOrWhiteSpace($Pattern)) {
+        throw "Invalid pattern provided."
+    }
+
     $pattern = $Pattern -replace '\*', '.*'
     $pattern = $pattern -replace '\?', '.'
 
@@ -42,11 +46,12 @@ $NvidiaSmiPath = ''
 $PossibleNvidiaSmiLocations = 'C:\Program Files\NVIDIA Corporation', 'C:\Program Files (x86)\NVIDIA Corporation' | ForEach-Object -Process {
     Get-GlobFiles -Pattern 'nvidia-smi.exe' -SearchPath $_
 }
-if ($PossibleNvidiaSmiLocations.Length -eq 0) {
+if ($PossibleNvidiaSmiLocations.Count -eq 0) {
+    Write-Warning "nvidia-smi.exe not found in expected locations. Using fallback path."
     $NvidiaSmiPath = 'C:\WINDOWS\system32\nvidia-smi.exe'
 }
 else {
-    Write-Host "Found nvidia-smi.exe at: $($PossibleNvidiaSmiLocations[0])"   
+    Write-Host "Found nvidia-smi.exe at: $($PossibleNvidiaSmiLocations[0])" -ForegroundColor Green
     $NvidiaSmiPath = $PossibleNvidiaSmiLocations[0]
 }
 
@@ -74,11 +79,19 @@ function Get-GPURegistryKey {
 }
 
 function Get-DriverModel {
-    if (Test-Path $NvidiaSmiPath) {
+    if (-not (Test-Path $NvidiaSmiPath)) {
+        Write-Error "nvidia-smi.exe not found at: $NvidiaSmiPath" -ErrorAction Stop
+        return
+    }
+
+    try {
         $out = & $NvidiaSmiPath --query-gpu=name,driver_model.current --format=csv,noheader 2>&1
         return ($out | Out-String).Trim()
     }
-    return 'nvidia-smi not found'
+    catch {
+        Write-Error "Failed to query driver model: $_" -ErrorAction Stop
+        return ''
+    }
 }
 
 function Show-GPUStatus($RegistryKey) {
@@ -93,13 +106,26 @@ function Show-GPUStatus($RegistryKey) {
 }
 
 function Backup-RegistryKey($RegistryKey, $Suffix) {
-    New-Item -ItemType Directory -Path $BackupDirectory -Force | Out-Null
-    $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $FilePath = Join-Path $BackupDirectory "p4-$($RegistryKey.PSChildName)-$Suffix-$Stamp.reg"
-    $RegPath = $RegistryKey.Name  # HKEY_LOCAL_MACHINE\...
-    & reg.exe export $RegPath $FilePath /y | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Backup failed, change not applied.' }
-    Write-Host "Backup saved: $FilePath"
+    try {
+        New-Item -ItemType Directory -Path $BackupDirectory -Force | Out-Null
+        $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+        $FilePath = Join-Path $BackupDirectory "p4-$($RegistryKey.PSChildName)-$Suffix-$Stamp.reg"
+        
+        if ($null -eq $Suffix) {
+            Write-Host "Creating backup directory: $BackupDirectory"
+        } else {
+            New-Item -ItemType Directory -Path $BackupDirectory -Force | Out-Null
+        }
+
+        $RegPath = $RegistryKey.Name  # HKEY_LOCAL_MACHINE\...
+        
+        & reg.exe export $RegPath $FilePath /y
+        
+        if ($LASTEXITCODE -ne 0) { throw 'Backup failed, change not applied.' }
+    }
+    catch {
+        Write-Host $_.Exception.Message -ForegroundColor Red
+    }
 }
 
 function Request-Restart {
@@ -122,7 +148,7 @@ function Set-Mode {
         Set-ItemProperty -Path $GPURegistryKey.PSPath -Name 'FeatureScore' -Value 0xd1 -Type DWord
         Set-ItemProperty -Path $GPURegistryKey.PSPath -Name 'EnableMsHybrid' -Value 1 -Type DWord
         Set-ItemProperty -Path $GPURegistryKey.PSPath -Name 'GridLicensedFeatures' -Value 7 -Type DWord
-        Write-Host "Set $Mode mode (hybrid graphics + WDDM)."
+        Write-Host "Set $Mode mode (hybrid graphics + WDDM)." -ForegroundColor Cyan
     }
     else {
         foreach ($PropertyToUnset in 'AdapterType', 'EnableMsHybrid') {
@@ -130,7 +156,11 @@ function Set-Mode {
                 Remove-ItemProperty -Path $GPURegistryKey.PSPath -Name $PropertyToUnset
             }
         }
-        Write-Host "Set $Mode mode (TCC). Games will not work in this mode."
+        Write-Host "Set $Mode mode (TCC). Games will not work in this mode." -ForegroundColor Cyan
+    }
+
+    if ($null -eq $Mode) {
+        Write-Error "Invalid mode specified. Use 'Gaming' or 'Compute'." -ErrorAction Stop
     }
 
     if (Test-Path $NvidiaSmiPath) {
